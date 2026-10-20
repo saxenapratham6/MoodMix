@@ -8,8 +8,9 @@ public struct Track: Codable, Hashable, Identifiable, Sendable {
     public let album: String
     public let durationMs: Int
     public let addedAt: Date?
+    public var artworkURL: URL?
 
-    public init(id: String, uri: String, name: String, artists: [String], album: String, durationMs: Int, addedAt: Date?) {
+    public init(id: String, uri: String, name: String, artists: [String], album: String, durationMs: Int, addedAt: Date?, artworkURL: URL? = nil) {
         self.id = id
         self.uri = uri
         self.name = name
@@ -17,6 +18,7 @@ public struct Track: Codable, Hashable, Identifiable, Sendable {
         self.album = album
         self.durationMs = durationMs
         self.addedAt = addedAt
+        self.artworkURL = artworkURL
     }
 
     public var artistLine: String { artists.joined(separator: ", ") }
@@ -26,6 +28,21 @@ public struct Playlist: Codable, Hashable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let trackCount: Int
+    public let imageURL: URL?
+    public let snapshotID: String?
+}
+
+public struct NowPlaying: Hashable, Sendable {
+    public let track: Track
+    public let isPlaying: Bool
+    public let progressMs: Int
+    public let fetchedAt: Date
+
+    /// Progress extrapolated from the last poll, so the bar moves smoothly.
+    public func progress(at date: Date) -> Int {
+        guard isPlaying else { return progressMs }
+        return min(track.durationMs, progressMs + Int(date.timeIntervalSince(fetchedAt) * 1000))
+    }
 }
 
 /// Spotify-style audio features. 0...1 scales unless noted.

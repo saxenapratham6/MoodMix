@@ -15,6 +15,8 @@ public struct SpotifyAPI: Sendable {
                 struct Count: Decodable { let total: Int }
                 let id: String
                 let name: String
+                let snapshot_id: String?
+                let images: [SpotifyImage]?
                 let items: Count?   // 2026 name
                 let tracks: Count?  // legacy name
             }
@@ -26,7 +28,8 @@ public struct SpotifyAPI: Sendable {
         while let u = url {
             let page: Page = try await get(u)
             result += page.items.compactMap { $0 }.map {
-                Playlist(id: $0.id, name: $0.name, trackCount: $0.items?.total ?? $0.tracks?.total ?? 0)
+                Playlist(id: $0.id, name: $0.name, trackCount: $0.items?.total ?? $0.tracks?.total ?? 0,
+                         imageURL: SpotifyImage.best($0.images, near: 300), snapshotID: $0.snapshot_id)
             }
             url = page.next.flatMap(URL.init(string:))
         }
@@ -47,6 +50,13 @@ public struct SpotifyAPI: Sendable {
         // A playlist can contain the same song twice; keep the first.
         var seen = Set<String>()
         return result.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Changes whenever the playlist is edited, so it's a cheap way to detect added songs.
+    public func playlistSnapshot(_ id: String) async throws -> String? {
+        struct R: Decodable { let snapshot_id: String? }
+        let r: R = try await get(endpoint("playlists/\(id)", ["fields": "snapshot_id"]))
+        return r.snapshot_id
     }
 
     /// Favorite scores from top tracks (short/medium/long term) and Liked Songs.
@@ -89,6 +99,19 @@ public struct SpotifyAPI: Sendable {
         let r: R = try await get(endpoint("me/player/devices"))
         return r.devices
     }
+
+    /// What's playing on any of your devices right now, or nil.
+    public func currentPlayback() async throws -> NowPlaying? {
+        struct R: Decodable { let is_playing: Bool; let progress_ms: Int?; let item: TrackObject? }
+        let data = try await send("GET", endpoint("me/player"))
+        guard !data.isEmpty, let r = try? JSONDecoder().decode(R.self, from: data), let track = r.item?.asTrack() else { return nil }
+        return NowPlaying(track: track, isPlaying: r.is_playing, progressMs: r.progress_ms ?? 0, fetchedAt: Date())
+    }
+
+    public func pause() async throws { try await send("PUT", endpoint("me/player/pause")) }
+    public func resume() async throws { try await send("PUT", endpoint("me/player/play")) }
+    public func next() async throws { try await send("POST", endpoint("me/player/next")) }
+    public func previous() async throws { try await send("POST", endpoint("me/player/previous")) }
 
     /// Plays exactly these tracks, in this order, on the active (or first available) device.
     public func play(uris: [String]) async throws {
@@ -139,8 +162,21 @@ public struct SpotifyAPI: Sendable {
     }
 }
 
+struct SpotifyImage: Decodable {
+    let url: String
+    let width: Int?
+
+    /// The image closest to `size` pixels wide.
+    static func best(_ images: [SpotifyImage]?, near size: Int) -> URL? {
+        guard let images, !images.isEmpty else { return nil }
+        let pick = images.min { abs(($0.width ?? size) - size) < abs(($1.width ?? size) - size) }!
+        return URL(string: pick.url)
+    }
+}
+
 struct TrackObject: Decodable {
     struct Name: Decodable { let name: String }
+    struct Album: Decodable { let name: String; let images: [SpotifyImage]? }
     let id: String?
     let uri: String?
     let name: String?
@@ -148,7 +184,17 @@ struct TrackObject: Decodable {
     let is_local: Bool?
     let duration_ms: Int?
     let artists: [Name]?
-    let album: Name?
+    let album: Album?
+
+    func asTrack(addedAt: Date? = nil) -> Track? {
+        guard type ?? "track" == "track", is_local != true, let id, let uri, let name else { return nil }
+        return Track(id: id, uri: uri, name: name,
+                     artists: artists?.map(\.name) ?? [],
+                     album: album?.name ?? "",
+                     durationMs: duration_ms ?? 210_000,
+                     addedAt: addedAt,
+                     artworkURL: SpotifyImage.best(album?.images, near: 300))
+    }
 }
 
 /// A playlist or Liked Songs entry. Spotify renamed `track` to `item` in 2026; accept both.
@@ -158,12 +204,6 @@ struct PlaylistItem: Decodable {
     let track: TrackObject?
 
     var asTrack: Track? {
-        guard let t = item ?? track, t.type ?? "track" == "track", t.is_local != true,
-              let id = t.id, let uri = t.uri, let name = t.name else { return nil }
-        return Track(id: id, uri: uri, name: name,
-                     artists: t.artists?.map(\.name) ?? [],
-                     album: t.album?.name ?? "",
-                     durationMs: t.duration_ms ?? 210_000,
-                     addedAt: added_at.flatMap { ISO8601DateFormatter().date(from: $0) })
+        (item ?? track)?.asTrack(addedAt: added_at.flatMap { ISO8601DateFormatter().date(from: $0) })
     }
 }

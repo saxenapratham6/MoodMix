@@ -16,8 +16,9 @@ struct MoodMixApp: App {
         WindowGroup("MoodMix") {
             ContentView()
                 .environment(model)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 1100, minHeight: 700)
         }
+        .windowStyle(.hiddenTitleBar)
         Settings {
             SettingsView()
                 .environment(model)
