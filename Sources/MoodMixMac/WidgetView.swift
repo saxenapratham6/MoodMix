@@ -11,18 +11,17 @@ struct WidgetView: View {
 
     var body: some View {
         let accent = Shared.palette.accent ?? model.mood.color
-        GlassGroup(spacing: 24) {
+        GlassGroup(spacing: 0) {
             if controller.mode == .bubble {
-                Bubble(accent: accent)
-                    .glassID("bubble", in: glass)
+                bubbleWithPill(accent)
                     .transition(.scale(scale: 0.3).combined(with: .opacity))
             } else {
                 VStack(spacing: WidgetController.gap) {
                     if controller.cardBelow {
                         bar(accent)
-                        card(accent)
+                        cardSlot(accent)
                     } else {
-                        card(accent)
+                        cardSlot(accent)
                         bar(accent)
                     }
                 }
@@ -30,35 +29,68 @@ struct WidgetView: View {
             }
         }
         .padding(WidgetController.pad)
-        .frame(maxWidth: .infinity, maxHeight: .infinity,
-               alignment: controller.mode == .bubble ? .center : controller.cardBelow ? .top : .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: rootAlignment)
         .environment(\.colorScheme, .dark)
         .foregroundStyle(.white)
         .task(id: model.nowPlaying?.track.artworkURL) {
             await Shared.palette.update(for: model.nowPlaying?.track.artworkURL)
         }
-        .onChange(of: controller.showCard) { if !controller.showCard { showingPlaylists = false } }
+        .onChange(of: controller.showCard) {
+            if controller.showCard { model.refreshIfStale() } else { showingPlaylists = false }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .moodMixTogglePlaylists)) { _ in
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showingPlaylists.toggle() }
         }
     }
 
-    private func bar(_ accent: Color) -> some View {
-        MiniBar(accent: accent)
-            .glassID("bar", in: glass)
+    private var rootAlignment: Alignment {
+        switch controller.mode {
+        case .bubble: controller.bubbleSide == .right ? .trailing : .leading
+        default: controller.cardBelow ? .top : .bottom
+        }
     }
 
-    @ViewBuilder private func card(_ accent: Color) -> some View {
-        if controller.showCard {
-            let anchor: UnitPoint = controller.cardBelow ? .top : .bottom
-            ExpandedCard(accent: accent, showingPlaylists: $showingPlaylists)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller.cardHeightChanged($0) }
-                .glassID("card", in: glass)
-                .transition(.asymmetric(
-                    insertion: .scale(scale: 0.35, anchor: anchor)
-                        .combined(with: .opacity)
-                        .combined(with: .offset(y: controller.cardBelow ? -24 : 24)),
-                    removal: .scale(scale: 0.5, anchor: anchor).combined(with: .opacity)))
+    private func bar(_ accent: Color) -> some View {
+        MiniBar(accent: accent)
+    }
+
+    /// The card lives in a slot clipped at the bar's edge, so it slides out from behind the bar
+    /// (up when the widget is low on screen, down when it's near the top), like macOS's Now Playing panel.
+    @ViewBuilder private func cardSlot(_ accent: Color) -> some View {
+        if controller.mode == .expanded {
+            let below = controller.cardBelow
+            ZStack(alignment: below ? .top : .bottom) {
+                if controller.showCard {
+                    ExpandedCard(accent: accent, showingPlaylists: $showingPlaylists)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller.cardHeightChanged($0) }
+                        .transition(.move(edge: below ? .top : .bottom).combined(with: .opacity))
+                }
+            }
+            .frame(width: WidgetController.barSize.width, height: controller.cardHeight, alignment: below ? .top : .bottom)
+            .mask(alignment: below ? .top : .bottom) {
+                Rectangle()
+                    .padding(.horizontal, -WidgetController.pad)
+                    .padding(below ? .bottom : .top, -WidgetController.pad)
+            }
+        }
+    }
+
+    private func bubbleWithPill(_ accent: Color) -> some View {
+        let right = controller.bubbleSide == .right
+        return HStack(spacing: WidgetController.pillGap) {
+            if right { pill(right: right) }
+            Bubble(accent: accent)
+            if !right { pill(right: right) }
+        }
+        .background { HoverTracker { controller.setBubbleHover($0) } }
+    }
+
+    @ViewBuilder private func pill(right: Bool) -> some View {
+        if controller.pillVisible {
+            BubblePill()
+                .transition(.move(edge: right ? .trailing : .leading)
+                    .combined(with: .scale(scale: 0.5, anchor: right ? .trailing : .leading))
+                    .combined(with: .opacity))
         }
     }
 }
@@ -201,9 +233,13 @@ struct Transport: View {
 struct GenerateButton: View {
     @Environment(AppModel.self) private var model
     var compact = false
+    var onTap: () -> Void = {}
 
     var body: some View {
-        Button { Task { await model.generate() } } label: {
+        Button {
+            onTap()
+            Task { await model.generate() }
+        } label: {
             Label("Generate", systemImage: "sparkles")
                 .font((compact ? Font.callout : .body).weight(.bold))
                 .frame(maxWidth: compact ? nil : .infinity)
@@ -276,13 +312,39 @@ private struct Bubble: View {
     }
 }
 
+/// Slides out of the bubble on hover so you can control playback without opening the bar.
+private struct BubblePill: View {
+    @Environment(WidgetController.self) private var controller
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Transport(size: .regular)
+            Button { controller.restoreFromBubble() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 28, height: 28)
+                    .liquidGlass(interactive: true, in: Circle())
+            }
+            .buttonStyle(.pressable)
+            .help("Open the bar")
+        }
+        .padding(.horizontal, 12)
+        .frame(width: WidgetController.pillWidth, height: 52)
+        .liquidGlass(tint: Color.black.opacity(0.35), in: Capsule())
+        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+    }
+}
+
 // MARK: - Card
+
+private enum CardTab { case mix, queue }
 
 private struct ExpandedCard: View {
     @Environment(AppModel.self) private var model
     @Environment(WidgetController.self) private var controller
     let accent: Color
     @Binding var showingPlaylists: Bool
+    @State private var tab: CardTab = .mix
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -294,8 +356,16 @@ private struct ExpandedCard: View {
                     PlaylistPicker { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showingPlaylists = false } }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    Controls()
-                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                    tabBar
+                    Group {
+                        switch tab {
+                        case .mix:
+                            Controls { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { tab = .queue } }
+                        case .queue:
+                            QueueView()
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
                 }
             }
             if let error = model.errorMessage {
@@ -320,6 +390,19 @@ private struct ExpandedCard: View {
         }
         .liquidGlass(tint: Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 8) {
+            GlassPill(title: "Mix", symbol: "slider.horizontal.3", selected: tab == .mix) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { tab = .mix }
+            }
+            GlassPill(title: model.queue.isEmpty ? "Queue" : "Queue · \(model.queue.upcoming.count)",
+                      symbol: "list.bullet", selected: tab == .queue) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { tab = .queue }
+            }
+            Spacer()
+        }
     }
 
     private var header: some View {
@@ -398,6 +481,8 @@ private struct PlaylistPicker: View {
 
 private struct Controls: View {
     @Environment(AppModel.self) private var model
+    /// Called when a mix starts, to show the queue.
+    var onStarted: () -> Void = {}
 
     var body: some View {
         @Bindable var model = model
@@ -444,9 +529,10 @@ private struct Controls: View {
             }
 
             HStack(spacing: 8) {
-                GenerateButton()
+                GenerateButton(onTap: onStarted)
                 actionButton("Match", symbol: "dot.radiowaves.left.and.right",
                              help: "Queue songs from this playlist that fit what's playing now") {
+                    onStarted()
                     await model.matchCurrentSong()
                 }
                 .disabled(model.nowPlaying == nil || model.busy != nil)
@@ -457,10 +543,7 @@ private struct Controls: View {
                 }
                 .disabled(!model.needsAnalysis || model.analysisStatus != nil)
             }
-
-            if !model.mix.isEmpty { upNext.transition(.opacity.combined(with: .move(edge: .bottom))) }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.mix.isEmpty)
     }
 
     private var status: some View {
@@ -474,32 +557,15 @@ private struct Controls: View {
                 Text(s)
             } else {
                 Text("\(model.tracks.count) songs · \(model.taggedCount) with moods · \(model.favoriteCount) favorites")
+                if model.skippedCount > 0 {
+                    Text("· \(model.skippedCount) duplicate\(model.skippedCount == 1 ? "" : "s") skipped")
+                        .help("Your Spotify playlist has \(model.selectedPlaylist?.trackCount ?? 0) entries; songs added more than once are counted once.")
+                }
             }
         }
         .font(.caption)
         .foregroundStyle(.white.opacity(0.7))
         .lineLimit(1)
-    }
-
-    private var upNext: some View {
-        let rowHeight: CGFloat = 46
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                section("Up next")
-                Spacer()
-                let minutes = model.mix.map(\.track.durationMs).reduce(0, +) / 60_000
-                Text("\(model.mix.count) songs · \(minutes) min").font(.caption).foregroundStyle(.white.opacity(0.6))
-            }
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(model.mix.enumerated()), id: \.element.id) { i, entry in
-                        UpNextRow(index: i, entry: entry).frame(height: rowHeight - 2)
-                    }
-                }
-            }
-            .scrollIndicators(.never)
-            .frame(height: CGFloat(min(model.mix.count, 5)) * rowHeight)
-        }
     }
 
     private func section(_ title: String) -> some View {
@@ -520,43 +586,178 @@ private struct Controls: View {
     }
 }
 
-private struct UpNextRow: View {
+private struct QueueView: View {
     @Environment(AppModel.self) private var model
-    let index: Int
-    let entry: MixEntry
+    @State private var search = ""
+
+    var body: some View {
+        let rowHeight: CGFloat = 46
+        VStack(alignment: .leading, spacing: 12) {
+            if model.queue.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Nothing queued yet").font(.callout.weight(.semibold))
+                    Text("Press Generate for a mood mix, or add songs below.").font(.caption).foregroundStyle(.white.opacity(0.6))
+                }
+                .padding(.vertical, 6)
+            } else {
+                if !model.queueActive {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pause.circle.fill").foregroundStyle(.orange)
+                        Text("Spotify is playing something else.").font(.caption)
+                        Spacer()
+                        Button("Resume queue") { Task { await model.resumeQueue() } }
+                            .buttonStyle(.pressable)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Theme.green)
+                    }
+                    .padding(10)
+                    .background(.white.opacity(0.07), in: .rect(cornerRadius: 12))
+                }
+                if let current = model.queue.current {
+                    section("Now playing")
+                    QueueRow(item: current, isCurrent: true).frame(height: rowHeight - 2)
+                }
+                HStack {
+                    section("Next up")
+                    Spacer()
+                    if let mood = model.queue.mood {
+                        Label("then more \(mood.title.lowercased())", systemImage: "infinity")
+                            .font(.caption).foregroundStyle(.white.opacity(0.55))
+                            .help("When the queue runs low, MoodMix adds more \(mood.title.lowercased()) songs from this playlist.")
+                    }
+                }
+                List {
+                    ForEach(model.queue.upcoming) { item in
+                        QueueRow(item: item, isCurrent: false)
+                            .frame(height: rowHeight - 2)
+                            .listRowInsets(EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                    .onMove { model.moveInQueue(fromOffsets: $0, toOffset: $1) }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .scrollIndicators(.never)
+                .frame(height: CGFloat(min(max(model.queue.upcoming.count, 1), 6)) * rowHeight)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.queue.upcoming.map(\.id))
+            }
+            AddSongField(search: $search)
+        }
+    }
+
+    private func section(_ title: String) -> some View {
+        Text(title.uppercased()).font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.6))
+    }
+}
+
+private struct QueueRow: View {
+    @Environment(AppModel.self) private var model
+    let item: QueueItem
+    let isCurrent: Bool
     @State private var hovering = false
 
     var body: some View {
-        let isCurrent = model.nowPlaying?.track.id == entry.id
         HStack(spacing: 10) {
             ZStack {
-                Artwork(url: entry.track.artworkURL, size: 36, radius: 6)
-                if hovering {
+                Artwork(url: item.track.artworkURL, size: 36, radius: 6)
+                if isCurrent && model.nowPlaying?.isPlaying == true {
+                    Image(systemName: "waveform").font(.caption.bold()).foregroundStyle(Theme.green)
+                        .symbolEffect(.variableColor.iterative)
+                        .padding(5).background(.black.opacity(0.55), in: .circle)
+                } else if hovering && !isCurrent {
                     Image(systemName: "play.fill").font(.caption).padding(6).background(.black.opacity(0.55), in: .circle)
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(entry.track.name).font(.callout.weight(.medium)).lineLimit(1).foregroundStyle(isCurrent ? Theme.green : .white)
-                Text(entry.track.artistLine).font(.caption).lineLimit(1).foregroundStyle(.white.opacity(0.6))
+                Text(item.track.name).font(.callout.weight(.medium)).lineLimit(1)
+                    .foregroundStyle(isCurrent ? Theme.green : .white)
+                Text(item.track.artistLine).font(.caption).lineLimit(1).foregroundStyle(.white.opacity(0.6))
             }
             Spacer()
-            if entry.favoriteScore > 0 { Image(systemName: "heart.fill").font(.caption2).foregroundStyle(Theme.green) }
-            if let f = entry.profile?.features {
-                Text("\(Int(f.tempo.rounded())) bpm").font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.6))
+            if item.addedByYou {
+                Image(systemName: "person.fill").font(.caption2).foregroundStyle(.white.opacity(0.6)).help("Added by you")
             }
-            if let blend = entry.transition {
-                Circle()
-                    .fill(blend.score >= 0.75 ? Theme.green : blend.score >= 0.5 ? .orange : .red)
-                    .frame(width: 7, height: 7)
-                    .help("\(blend.label) blend from the previous song")
+            if let mood = model.profiles[item.track.id]?.moods.first { MoodTag(mood: mood) }
+            if hovering && !isCurrent {
+                Button { model.removeFromQueue(item.id) } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.7))
+                }
+                .buttonStyle(.pressable)
+                .help("Remove from queue")
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, 6)
+        .frame(maxHeight: .infinity)
         .background(hovering ? Color.white.opacity(0.08) : .clear, in: .rect(cornerRadius: 8))
         .contentShape(.rect)
         .onHover { hovering = $0 }
-        .onTapGesture { Task { await model.playMix(from: index) } }
-        .help("Play from here")
+        .onTapGesture(count: 2) { if !isCurrent { Task { await model.jumpInQueue(to: item.id) } } }
+        .help(isCurrent ? "Playing now" : "Double-click to play · drag to reorder")
+    }
+}
+
+/// Search the playlist and drop any song into the queue; the queue's mood continues after it.
+private struct AddSongField: View {
+    @Environment(AppModel.self) private var model
+    @Binding var search: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.6))
+                TextField("Add a song from \(model.selectedPlaylist?.name ?? "your playlist")…", text: $search)
+                    .textFieldStyle(.plain)
+                if !search.isEmpty {
+                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.6)) }
+                        .buttonStyle(.pressable)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .liquidGlass(in: Capsule())
+
+            if !search.isEmpty {
+                let results = model.searchPlaylist(search, limit: 6)
+                if results.isEmpty {
+                    Text("No songs in this playlist match.").font(.caption).foregroundStyle(.white.opacity(0.6)).padding(.leading, 12)
+                }
+                ForEach(results) { track in
+                    HStack(spacing: 10) {
+                        Artwork(url: track.artworkURL, size: 32, radius: 5)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(track.name).font(.callout).lineLimit(1)
+                            Text(track.artistLine).font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        }
+                        Spacer()
+                        if let mood = model.profiles[track.id]?.moods.first { MoodTag(mood: mood) }
+                        Button {
+                            model.playNext(track)
+                            search = ""
+                        } label: {
+                            Label("Next", systemImage: "text.line.first.and.arrowtriangle.forward").font(.caption.weight(.semibold))
+                                .padding(.horizontal, 9).padding(.vertical, 5)
+                                .liquidGlass(interactive: true, in: Capsule())
+                        }
+                        .buttonStyle(.pressable)
+                        .help("Play right after the current song")
+                        Button {
+                            model.addToQueueEnd(track)
+                            search = ""
+                        } label: {
+                            Image(systemName: "plus").font(.caption.weight(.bold))
+                                .frame(width: 26, height: 26)
+                                .liquidGlass(interactive: true, in: Circle())
+                        }
+                        .buttonStyle(.pressable)
+                        .help("Add to the end of the queue")
+                    }
+                    .padding(.horizontal, 6)
+                    .frame(height: 40)
+                }
+            }
+        }
     }
 }
 

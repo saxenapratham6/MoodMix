@@ -38,7 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case 2, 3: NotificationCenter.default.post(name: .moodMixTogglePlaylists, object: nil)
                 case 4: widget.collapse()
                 case 5: widget.shrinkToBubble()
-                case 6: widget.restoreFromBubble()
+                case 6: widget.setBubbleHover(true)
+                case 7:
+                    widget.setBubbleHover(false)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    widget.restoreFromBubble()
                 default: break
                 }
                 Shared.model.mood = Mood.allCases[i % Mood.allCases.count]

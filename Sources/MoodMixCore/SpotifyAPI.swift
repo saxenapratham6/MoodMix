@@ -40,7 +40,7 @@ public struct SpotifyAPI: Sendable {
     public func tracks(inPlaylist id: String, progress: (@Sendable (Int) -> Void)? = nil) async throws -> [Track] {
         struct Page: Decodable { let items: [PlaylistItem]; let next: String? }
         var result: [Track] = []
-        var url: URL? = endpoint("playlists/\(id)/items", ["limit": "50"])
+        var url: URL? = endpoint("playlists/\(id)/items", ["limit": "100"])
         while let u = url {
             let page: Page = try await get(u)
             result += page.items.compactMap { $0.asTrack }
@@ -114,19 +114,14 @@ public struct SpotifyAPI: Sendable {
     public func previous() async throws { try await send("POST", endpoint("me/player/previous")) }
 
     /// Plays exactly these tracks, in this order, on the active (or first available) device.
-    public func play(uris: [String]) async throws {
+    /// `positionMs` resumes the first track mid-way, which is how MoodMix re-sends its queue
+    /// after an edit without restarting the current song.
+    public func play(uris: [String], positionMs: Int = 0) async throws {
         let deviceID = try await playbackDeviceID()
         try await send("PUT", endpoint("me/player/shuffle", ["state": "false", "device_id": deviceID]))
-        let body = try JSONSerialization.data(withJSONObject: ["uris": Array(uris.prefix(100))])
-        try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: body)
-    }
-
-    /// Adds tracks to "Next up", after whatever is playing now.
-    public func addToQueue(uris: [String]) async throws {
-        let deviceID = try await playbackDeviceID()
-        for uri in uris {
-            try await send("POST", endpoint("me/player/queue", ["uri": uri, "device_id": deviceID]))
-        }
+        var body: [String: Any] = ["uris": Array(uris.prefix(100))]
+        if positionMs > 0 { body["position_ms"] = positionMs }
+        try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: try JSONSerialization.data(withJSONObject: body))
     }
 
     /// The active device, else this computer, else any device. A freshly launched Spotify

@@ -40,6 +40,11 @@ public final class AppModel {
     /// Platform hook run before playback, e.g. launching the Spotify app on macOS.
     @ObservationIgnored public var beforePlayback: (@MainActor () async -> Void)?
 
+    /// MoodMix's own queue. `queueActive` is false when Spotify is playing something else.
+    public private(set) var queue = PlayQueue()
+    public private(set) var queueActive = false
+    @ObservationIgnored private var resendTask: Task<Void, Never>?
+
     /// When Spotify's quota resets, while MoodMix is backing off.
     public private(set) var rateLimitedUntil: Date?
 
@@ -77,6 +82,14 @@ public final class AppModel {
     public var taggedCount: Int { tracks.filter { !(profiles[$0.id]?.moods.isEmpty ?? true) }.count }
     public var favoriteCount: Int { tracks.filter { favorites.score(for: $0.id) > 0 }.count }
     public var needsAnalysis: Bool { taggedCount < tracks.count }
+    /// Playlist entries MoodMix doesn't count: the same song added twice, local files, podcasts.
+    public var skippedCount: Int { max(0, (selectedPlaylist?.trackCount ?? 0) - tracks.count) }
+
+    /// Re-checks Spotify for playlist changes if it hasn't recently (e.g. when the widget opens).
+    public func refreshIfStale() {
+        guard isLoggedIn, busy == nil, Date().timeIntervalSince(lastLibraryAttempt) > 20 else { return }
+        Task { await refreshLibrary() }
+    }
 
     // MARK: Account
 
@@ -236,40 +249,146 @@ public final class AppModel {
     public func playMix(from index: Int = 0) async {
         if mix.isEmpty { buildMix() }
         guard index < mix.count else { return }
-        await play(mix[index...].map(\.track))
+        queue.start(mix[index...].map(\.track), mood: mood)
+        await sendQueue(positionMs: 0)
     }
 
-    /// A fresh mix for the selected mood, played right away.
+    /// A fresh mix for the selected mood, played right away as MoodMix's queue.
     public func generate() async {
         buildMix()
         guard !mix.isEmpty else { return }
-        await play(mix.map(\.track))
+        queue.start(mix.map(\.track), mood: mood)
+        await sendQueue(positionMs: 0)
     }
 
-    /// Takes the mood of the song playing now and queues matching songs from the playlist after it.
+    /// Takes the mood of the song playing now and lines up matching songs from the playlist after it,
+    /// without restarting it.
     public func matchCurrentSong() async {
-        guard let current = nowPlaying?.track else {
+        guard let np = nowPlaying else {
             errorMessage = "Play something first, then Match finds songs from your playlist that fit it."
             return
         }
-        if let topMood = profiles[current.id]?.moods.first { mood = topMood }
+        if let topMood = profiles[np.track.id]?.moods.first { mood = topMood }
+        let inPlaylist = tracks.contains { $0.id == np.track.id }
         let request = MixRequest(mood: mood, minutes: minutes, favoriteWeight: favoriteWeight, arc: arc,
-                                 startTrackID: tracks.contains { $0.id == current.id } ? current.id : nil)
+                                 startTrackID: inPlaylist ? np.track.id : nil)
         mix = MixBuilder.build(tracks: tracks, profiles: profiles, favorites: favorites, request: request)
-        let upNext = mix.filter { $0.id != current.id }.prefix(30).map(\.track.uri)
-        guard !upNext.isEmpty else { return }
-        await run("Queueing \(upNext.count) \(mood.title.lowercased()) songs…") {
-            await self.beforePlayback?()
-            try await self.api.addToQueue(uris: Array(upNext))
-        }
+        let rest = mix.map(\.track).filter { $0.id != np.track.id }
+        guard !rest.isEmpty else { return }
+        queue.start([np.track] + rest, mood: mood)
+        await sendQueue(positionMs: currentProgress)
     }
 
     public func play(_ tracks: [Track]) async {
-        await run("Starting playback…") {
+        queue.start(tracks, mood: mood)
+        await sendQueue(positionMs: 0)
+    }
+
+    // MARK: Queue
+
+    public func moveInQueue(fromOffsets source: IndexSet, toOffset destination: Int) {
+        queue.move(fromOffsets: source, toOffset: destination)
+        scheduleResend()
+    }
+
+    public func removeFromQueue(_ id: UUID) {
+        queue.remove(id)
+        scheduleResend()
+    }
+
+    /// Adds any song from the playlist right after the current one. The queue's mood carries on after it.
+    public func playNext(_ track: Track) {
+        guard !queue.isEmpty else {
+            Task { await play([track]) }
+            return
+        }
+        queue.playNext(track)
+        scheduleResend()
+    }
+
+    public func addToQueueEnd(_ track: Track) {
+        guard !queue.isEmpty else {
+            Task { await play([track]) }
+            return
+        }
+        queue.addToEnd(track)
+        scheduleResend()
+    }
+
+    public func jumpInQueue(to id: UUID) async {
+        guard queue.jump(to: id) else { return }
+        await sendQueue(positionMs: 0)
+    }
+
+    /// Picks the queue back up after you played something else in Spotify.
+    public func resumeQueue() async {
+        await sendQueue(positionMs: 0)
+    }
+
+    /// Songs in the playlist matching a search, for adding to the queue.
+    public func searchPlaylist(_ text: String, limit: Int = 8) -> [Track] {
+        let words = text.lowercased().split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return [] }
+        return Array(tracks.lazy.filter { track in
+            let haystack = (track.name + " " + track.artistLine + " " + track.album).lowercased()
+            return words.allSatisfy { haystack.contains($0) }
+        }.prefix(limit))
+    }
+
+    /// Edits are batched briefly, then the new order is sent to Spotify, continuing the current song.
+    private func scheduleResend() {
+        resendTask?.cancel()
+        guard queueActive else { return }
+        resendTask = Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
+            resendTask = nil
+            await sendQueue(positionMs: currentProgress)
+        }
+    }
+
+    private var currentProgress: Int {
+        guard let np = nowPlaying, np.track.id == queue.current?.track.id else { return 0 }
+        return np.progress(at: Date()) + 250  // allow for request latency
+    }
+
+    private func sendQueue(positionMs: Int) async {
+        guard !queue.isEmpty else { return }
+        let uris = queue.uris
+        await run(queueActive ? nil : "Starting playback…") {
             await self.beforePlayback?()
-            try await self.api.play(uris: tracks.map(\.uri))
+            try await self.api.play(uris: uris, positionMs: positionMs)
+            self.queue.markSent()
+            self.queueActive = true
         }
         await refreshPlayback()
+    }
+
+    /// Keeps the queue in step with Spotify and topped up with songs in its mood.
+    private func followQueue() async {
+        guard queueActive, let np = nowPlaying else { return }
+        guard queue.follow(playingTrackID: np.track.id) else {
+            queueActive = false  // you started something else in Spotify
+            return
+        }
+        if queue.needsMore, let mood = queue.mood {
+            let used = queue.trackIDs
+            let anchor = queue.upcoming.last?.track ?? queue.current?.track
+            let request = MixRequest(mood: mood, minutes: 45, favoriteWeight: favoriteWeight, arc: .steady, startTrackID: anchor?.id)
+            var more = MixBuilder.build(tracks: tracks.filter { !used.contains($0.id) || $0.id == anchor?.id },
+                                        profiles: profiles, favorites: favorites, request: request)
+                .map(\.track).filter { !used.contains($0.id) }
+            if more.isEmpty {
+                // Every song in this mood has played; start the mood over.
+                more = MixBuilder.build(tracks: tracks, profiles: profiles, favorites: favorites, request: request)
+                    .map(\.track).filter { $0.id != queue.current?.track.id }
+            }
+            queue.extend(with: Array(more.prefix(12)))
+        }
+        // Spotify is on the last song it was given: hand it the rest while this one is still early.
+        if queue.needsResend, resendTask == nil {
+            await sendQueue(positionMs: currentProgress)
+        }
     }
 
     public func togglePlayPause() async {
@@ -314,6 +433,7 @@ public final class AppModel {
     private func refreshPlayback() async {
         guard isLoggedIn, let state = try? await api.currentPlayback() else { return }
         nowPlaying = state
+        await followQueue()
     }
 
     private func control(_ action: @escaping (SpotifyAPI) async throws -> Void) async {

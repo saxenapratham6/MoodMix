@@ -19,6 +19,8 @@ final class WidgetController {
     static let barSize = NSSize(width: 580, height: 64)
     static let bubbleDiameter: CGFloat = 64
     static let gap: CGFloat = 10
+    static let pillWidth: CGFloat = 168
+    static let pillGap: CGFloat = 8
 
     private(set) var mode: Mode = .bar
     /// Drives the card's SwiftUI transition; lags `mode` so the card can animate out before the window shrinks.
@@ -26,9 +28,14 @@ final class WidgetController {
     /// The card opens downward when the bar sits near the top of the screen.
     private(set) var cardBelow = false
     private(set) var bubbleSide: Side = .right
+    /// The card's measured height; the window and the card's slide distance follow it.
+    private(set) var cardHeight: CGFloat
+    /// Hovering the bubble widens the window, then slides out a pill with playback controls.
+    private(set) var bubbleWide = false
+    private(set) var pillVisible = false
 
     @ObservationIgnored let panel: WidgetPanel
-    @ObservationIgnored private var cardHeight: CGFloat
+    @ObservationIgnored private var hoverTask: Task<Void, Never>?
     @ObservationIgnored private var barOrigin: NSPoint?
     @ObservationIgnored private var bubbleCenterY: CGFloat
     @ObservationIgnored private let defaults = UserDefaults.standard
@@ -83,6 +90,7 @@ final class WidgetController {
 
     func expand() {
         show()
+        resetBubbleHover()
         if mode == .bubble { restoreFromBubble() }
         mode = .expanded
         layout(animate: false)
@@ -114,12 +122,46 @@ final class WidgetController {
 
     func restoreFromBubble() {
         guard mode == .bubble else { return }
+        resetBubbleHover()
         let visible = visibleFrame
         let x = bubbleSide == .left ? visible.minX + 12 : visible.maxX - Self.barSize.width - 12
         barOrigin = NSPoint(x: x, y: bubbleCenterY - Self.barSize.height / 2)
         withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { mode = .bar }
         layout(animate: true)
         save()
+    }
+
+    /// Mouse entered or left the bubble (and its pill).
+    func setBubbleHover(_ inside: Bool) {
+        guard mode == .bubble else { return }
+        hoverTask?.cancel()
+        if inside {
+            guard !bubbleWide else {
+                if !pillVisible { withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { pillVisible = true } }
+                return
+            }
+            bubbleWide = true
+            layout(animate: false)
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { pillVisible = true }
+        } else {
+            hoverTask = Task {
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled, mode == .bubble else { return }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                    pillVisible = false
+                } completion: {
+                    guard !self.pillVisible else { return }
+                    self.bubbleWide = false
+                    self.layout(animate: false)
+                }
+            }
+        }
+    }
+
+    private func resetBubbleHover() {
+        hoverTask?.cancel()
+        pillVisible = false
+        bubbleWide = false
     }
 
     /// Puts the widget back at the bottom center.
@@ -140,14 +182,19 @@ final class WidgetController {
 
         switch mode {
         case .bubble:
-            let nearLeft = inner.midX - visible.minX < 140
-            let nearRight = visible.maxX - inner.midX < 140
+            let d = Self.bubbleDiameter
+            let bubble = bubbleWide && bubbleSide == .right
+                ? NSRect(x: inner.maxX - d, y: inner.midY - d / 2, width: d, height: d)
+                : NSRect(x: inner.minX, y: inner.midY - d / 2, width: d, height: d)
+            resetBubbleHover()
+            let nearLeft = bubble.midX - visible.minX < 140
+            let nearRight = visible.maxX - bubble.midX < 140
             if nearLeft || nearRight {
                 bubbleSide = nearLeft ? .left : .right
-                bubbleCenterY = inner.midY
+                bubbleCenterY = bubble.midY
             } else {
                 // Pulled away from the edge: open back up into a bar right there.
-                barOrigin = NSPoint(x: inner.midX - Self.barSize.width / 2, y: inner.midY - Self.barSize.height / 2)
+                barOrigin = NSPoint(x: bubble.midX - Self.barSize.width / 2, y: bubble.midY - Self.barSize.height / 2)
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { mode = .bar }
             }
             layout(animate: true)
@@ -204,7 +251,13 @@ final class WidgetController {
             let d = Self.bubbleDiameter
             let x = bubbleSide == .left ? visible.minX + 8 : visible.maxX - d - 8
             let y = min(max(bubbleCenterY - d / 2, visible.minY + 8), visible.maxY - d - 8)
-            return NSRect(x: x, y: y, width: d, height: d).insetBy(dx: -Self.pad, dy: -Self.pad)
+            var rect = NSRect(x: x, y: y, width: d, height: d)
+            if bubbleWide {
+                let extra = Self.pillWidth + Self.pillGap
+                if bubbleSide == .right { rect.origin.x -= extra }
+                rect.size.width += extra
+            }
+            return rect.insetBy(dx: -Self.pad, dy: -Self.pad)
         case .bar:
             return barRect().insetBy(dx: -Self.pad, dy: -Self.pad)
         case .expanded:

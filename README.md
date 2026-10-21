@@ -6,6 +6,8 @@ On macOS it's a Liquid Glass widget (no window, no Dock icon), tinted with the c
 
 - **Bar:** now playing, ⏮ ⏯ ⏭, **Generate**, and a chevron that grows the control card out of the bar: playlists, moods, energy shape, length, favorites weight, **Generate** / **Match** (queue songs that fit what's playing now) / **Analyze**, and Up next.
 - **Move it anywhere:** drag the bar or card. Drag it to the left or right screen edge (or click ◌) and it becomes a **bubble** with the album art and a progress ring; click the bubble to bring the bar back.
+- **Queue:** the card's Queue tab shows now playing and what's next. Drag to reorder, remove songs, double-click to jump, or search the playlist to add any song *next* or *at the end*. A song from another mood plays where you put it, then the queue carries on in its mood, topping itself up when it runs low. Spotify's API can't reorder its own queue, so MoodMix keeps the order and re-sends it to Spotify after an edit, resuming the current song where it was (expect a brief blip).
+- **Bubble controls:** hover the bubble for a glass pill with ⏮ ⏯ ⏭ and a button to reopen the bar.
 - **Menu bar:** a Now Playing–style glass panel with quick moods, Generate, Match, show/hide, bubble, reset position, Settings and Quit.
 - It launches Spotify in the background if it isn't open.
 
@@ -45,6 +47,7 @@ Keep the Spotify app open on some device (Mac or phone) so there's somewhere to 
 
 ## Notes
 
+- Songs added to a playlist more than once are counted once (the card notes how many duplicates were skipped).
 - Spotify only returns playlist items for playlists you **own or collaborate on**. To use someone else's playlist, copy it to your own playlist first.
 - Claude's default model is `claude-opus-5-5`. You can switch to `claude-haiku-5-5` in Settings for a much cheaper first pass over thousands of songs. Results are cached in `~/Library/Application Support/MoodMix/profiles.json`.
 - Tokens and keys are stored in the macOS Keychain.
