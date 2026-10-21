@@ -2,7 +2,12 @@
 
 A floating Spotify widget for Premium users. Pick a mood and MoodMix builds a queue **only from your own playlist** (no suggested tracks), leaning on your favorites. It orders the songs so each one flows into the next, then plays them on your Spotify.
 
-On macOS it lives as a slim bar at the bottom of your screen (no window, no Dock icon). Click the chevron to spring it open: switch playlists, pick a mood and energy shape, set favorites weight, then **Generate**, **Match** (queue songs that fit what's playing now) or **Analyze**. It launches Spotify in the background if it isn't open. Settings and Quit live in the menu bar icon.
+On macOS it's a Liquid Glass widget (no window, no Dock icon), tinted with the current album art:
+
+- **Bar:** now playing, ⏮ ⏯ ⏭, **Generate**, and a chevron that grows the control card out of the bar: playlists, moods, energy shape, length, favorites weight, **Generate** / **Match** (queue songs that fit what's playing now) / **Analyze**, and Up next.
+- **Move it anywhere:** drag the bar or card. Drag it to the left or right screen edge (or click ◌) and it becomes a **bubble** with the album art and a progress ring; click the bubble to bring the bar back.
+- **Menu bar:** a Now Playing–style glass panel with quick moods, Generate, Match, show/hide, bubble, reset position, Settings and Quit.
+- It launches Spotify in the background if it isn't open.
 
 macOS first. The core (`MoodMixCore`) is platform-neutral, so the iOS app can reuse it.
 

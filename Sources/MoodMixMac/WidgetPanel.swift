@@ -8,17 +8,43 @@ final class WidgetPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Owns the floating widget and keeps it pinned to the bottom center of the screen, above the Dock.
-@MainActor
+/// Owns the floating widget: where it is, and whether it's a bar, an open card, or a bubble on a screen edge.
+@MainActor @Observable
 final class WidgetController {
-    static let collapsedSize = NSSize(width: 600, height: 92)
-    static let expandedSize = NSSize(width: 600, height: 680)
+    enum Mode: String { case bar, expanded, bubble }
+    enum Side: String { case left, right }
 
-    let panel: WidgetPanel
-    private var expanded = false
+    /// Room around the glass for its shadow.
+    static let pad: CGFloat = 18
+    static let barSize = NSSize(width: 580, height: 64)
+    static let bubbleDiameter: CGFloat = 64
+    static let gap: CGFloat = 10
+
+    private(set) var mode: Mode = .bar
+    /// Drives the card's SwiftUI transition; lags `mode` so the card can animate out before the window shrinks.
+    private(set) var showCard = false
+    /// The card opens downward when the bar sits near the top of the screen.
+    private(set) var cardBelow = false
+    private(set) var bubbleSide: Side = .right
+
+    @ObservationIgnored let panel: WidgetPanel
+    @ObservationIgnored private var cardHeight: CGFloat
+    @ObservationIgnored private var barOrigin: NSPoint?
+    @ObservationIgnored private var bubbleCenterY: CGFloat
+    @ObservationIgnored private let defaults = UserDefaults.standard
 
     init(model: AppModel) {
-        panel = WidgetPanel(contentRect: NSRect(origin: .zero, size: Self.collapsedSize),
+        let savedHeight = defaults.double(forKey: "widget.cardHeight")
+        cardHeight = savedHeight > 0 ? savedHeight : 470
+        let savedBubbleY = defaults.double(forKey: "widget.bubbleY")
+        bubbleCenterY = savedBubbleY > 0 ? savedBubbleY : 400
+        bubbleSide = Side(rawValue: defaults.string(forKey: "widget.bubbleSide") ?? "") ?? .right
+        if defaults.object(forKey: "widget.barX") != nil {
+            barOrigin = NSPoint(x: defaults.double(forKey: "widget.barX"), y: defaults.double(forKey: "widget.barY"))
+        }
+        mode = defaults.string(forKey: "widget.mode") == Mode.bubble.rawValue ? .bubble : .bar
+
+        panel = WidgetPanel(contentRect: NSRect(x: 0, y: 0, width: 600, height: 100),
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.level = .floating
@@ -29,40 +55,195 @@ final class WidgetController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
 
-        // The window's size is set only by `place`. The SwiftUI view just fills a plain container with an
-        // autoresizing mask, so SwiftUI and the window never negotiate size through Auto Layout. That
-        // negotiation is what looped forever and crashed while the content changed during a resize.
-        let host = NSHostingView(rootView: WidgetView(controller: self).environment(model))
+        // The window's size is set only by `layout`. The SwiftUI view just fills a frame-based container,
+        // so SwiftUI and the window never negotiate size through Auto Layout (that loop used to crash).
+        let host = NSHostingView(rootView: WidgetView().environment(model).environment(self))
         host.sizingOptions = []
         host.translatesAutoresizingMaskIntoConstraints = true
         host.autoresizingMask = [.width, .height]
-        let container = NSView(frame: NSRect(origin: .zero, size: Self.collapsedSize))
+        let container = NSView(frame: panel.contentRect(forFrameRect: panel.frame))
         host.frame = container.bounds
         container.addSubview(host)
         panel.contentView = container
-        place(size: Self.collapsedSize, animate: false)
+
+        layout(animate: false)
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.place(size: self?.panel.frame.size ?? Self.collapsedSize, animate: false) }
+            MainActor.assumeIsolated { self?.layout(animate: false) }
         }
     }
 
     var isVisible: Bool { panel.isVisible }
-
     func show() { panel.orderFrontRegardless() }
     func hide() { panel.orderOut(nil) }
     func toggleVisible() { isVisible ? hide() : show() }
 
-    func resize(expanded: Bool) {
-        self.expanded = expanded
-        place(size: expanded ? Self.expandedSize : Self.collapsedSize, animate: true)
+    // MARK: Modes
+
+    func toggleExpanded() { mode == .expanded ? collapse() : expand() }
+
+    func expand() {
+        show()
+        if mode == .bubble { restoreFromBubble() }
+        mode = .expanded
+        layout(animate: false)
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { showCard = true }
     }
 
-    private func place(size: NSSize, animate: Bool) {
-        guard let screen = panel.screen ?? NSScreen.main else { return }
-        let visible = screen.visibleFrame
-        let frame = NSRect(x: visible.midX - size.width / 2, y: visible.minY + 4, width: size.width, height: size.height)
-        // SwiftUI animates the card itself, so the window can snap to its new size.
+    func collapse(then next: (() -> Void)? = nil) {
+        guard mode == .expanded else { next?(); return }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+            showCard = false
+        } completion: {
+            self.mode = .bar
+            self.layout(animate: false)
+            next?()
+        }
+    }
+
+    func shrinkToBubble(side: Side? = nil, centerY: CGFloat? = nil) {
+        show()
+        collapse {
+            let bar = self.barRect()
+            self.bubbleSide = side ?? (bar.midX < self.visibleFrame.midX ? .left : .right)
+            self.bubbleCenterY = centerY ?? bar.midY
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { self.mode = .bubble }
+            self.layout(animate: true)
+            self.save()
+        }
+    }
+
+    func restoreFromBubble() {
+        guard mode == .bubble else { return }
+        let visible = visibleFrame
+        let x = bubbleSide == .left ? visible.minX + 12 : visible.maxX - Self.barSize.width - 12
+        barOrigin = NSPoint(x: x, y: bubbleCenterY - Self.barSize.height / 2)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { mode = .bar }
+        layout(animate: true)
+        save()
+    }
+
+    /// Puts the widget back at the bottom center.
+    func resetPosition() {
+        barOrigin = nil
+        collapse {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { self.mode = .bar }
+            self.layout(animate: true)
+            self.save()
+        }
+    }
+
+    /// Called by the drag handle when the user lets go: snap to an edge as a bubble, or stay put as a bar.
+    func dragEnded() {
+        let mouse = NSEvent.mouseLocation
+        let visible = (NSScreen.screens.first { $0.frame.contains(mouse) } ?? panel.screen ?? NSScreen.main)?.visibleFrame ?? visibleFrame
+        let inner = panel.frame.insetBy(dx: Self.pad, dy: Self.pad)
+
+        switch mode {
+        case .bubble:
+            let nearLeft = inner.midX - visible.minX < 140
+            let nearRight = visible.maxX - inner.midX < 140
+            if nearLeft || nearRight {
+                bubbleSide = nearLeft ? .left : .right
+                bubbleCenterY = inner.midY
+            } else {
+                // Pulled away from the edge: open back up into a bar right there.
+                barOrigin = NSPoint(x: inner.midX - Self.barSize.width / 2, y: inner.midY - Self.barSize.height / 2)
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { mode = .bar }
+            }
+            layout(animate: true)
+            save()
+
+        case .bar, .expanded:
+            let bar = barRectInPanel()
+            barOrigin = bar.origin
+            let edge: Side? =
+                mouse.x - visible.minX < 48 || bar.minX < visible.minX - 4 ? .left :
+                visible.maxX - mouse.x < 48 || bar.maxX > visible.maxX + 4 ? .right : nil
+            if let edge {
+                shrinkToBubble(side: edge, centerY: min(max(mouse.y, visible.minY + 40), visible.maxY - 40))
+            } else {
+                layout(animate: true)
+                save()
+            }
+        }
+    }
+
+    /// The card reports its natural height so the window hugs it (no empty space).
+    func cardHeightChanged(_ height: CGFloat) {
+        guard height > 40, abs(height - cardHeight) > 0.5 else { return }
+        cardHeight = height
+        defaults.set(Double(height), forKey: "widget.cardHeight")
+        if mode == .expanded { layout(animate: false) }
+    }
+
+    // MARK: Layout
+
+    private var visibleFrame: NSRect { (panel.screen ?? NSScreen.main ?? NSScreen.screens[0]).visibleFrame }
+
+    /// Where the bar should be, kept fully on screen.
+    private func barRect() -> NSRect {
+        let visible = visibleFrame
+        let size = Self.barSize
+        var origin = barOrigin ?? NSPoint(x: visible.midX - size.width / 2, y: visible.minY + 6)
+        origin.x = min(max(origin.x, visible.minX + 6), visible.maxX - size.width - 6)
+        origin.y = min(max(origin.y, visible.minY + 6), visible.maxY - size.height - 6)
+        return NSRect(origin: origin, size: size)
+    }
+
+    /// Where the bar currently is inside the (possibly just dragged) panel.
+    private func barRectInPanel() -> NSRect {
+        let inner = panel.frame.insetBy(dx: Self.pad, dy: Self.pad)
+        let y = mode == .expanded && cardBelow ? inner.maxY - Self.barSize.height : inner.minY
+        return NSRect(x: inner.minX, y: y, width: Self.barSize.width, height: Self.barSize.height)
+    }
+
+    private func targetFrame() -> NSRect {
+        let visible = visibleFrame
+        switch mode {
+        case .bubble:
+            let d = Self.bubbleDiameter
+            let x = bubbleSide == .left ? visible.minX + 8 : visible.maxX - d - 8
+            let y = min(max(bubbleCenterY - d / 2, visible.minY + 8), visible.maxY - d - 8)
+            return NSRect(x: x, y: y, width: d, height: d).insetBy(dx: -Self.pad, dy: -Self.pad)
+        case .bar:
+            return barRect().insetBy(dx: -Self.pad, dy: -Self.pad)
+        case .expanded:
+            let bar = barRect()
+            let extra = Self.gap + cardHeight
+            let roomAbove = visible.maxY - bar.maxY
+            let roomBelow = bar.minY - visible.minY
+            cardBelow = roomAbove < extra && roomBelow > roomAbove
+            var frame = bar
+            if cardBelow { frame.origin.y -= extra }
+            frame.size.height += extra
+            return frame.insetBy(dx: -Self.pad, dy: -Self.pad)
+        }
+    }
+
+    private func layout(animate: Bool) {
+        let frame = targetFrame()
         guard panel.frame != frame else { return }
-        panel.setFrame(frame, display: true, animate: false)
+        if animate {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.32
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.25, 1)
+                panel.animator().setFrame(frame, display: true)
+            }
+        } else {
+            panel.setFrame(frame, display: true)
+        }
+    }
+
+    private func save() {
+        defaults.set(mode == .bubble ? Mode.bubble.rawValue : Mode.bar.rawValue, forKey: "widget.mode")
+        defaults.set(bubbleSide.rawValue, forKey: "widget.bubbleSide")
+        defaults.set(Double(bubbleCenterY), forKey: "widget.bubbleY")
+        if let barOrigin {
+            defaults.set(Double(barOrigin.x), forKey: "widget.barX")
+            defaults.set(Double(barOrigin.y), forKey: "widget.barY")
+        } else {
+            defaults.removeObject(forKey: "widget.barX")
+            defaults.removeObject(forKey: "widget.barY")
+        }
     }
 }

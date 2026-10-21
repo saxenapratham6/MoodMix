@@ -9,33 +9,43 @@ enum Shared {
         model.beforePlayback = { await SpotifyLauncher.ensureRunning() }
         return model
     }()
+    static let palette = ArtworkPalette()
+    static var widget: WidgetController?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private(set) var widget: WidgetController?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // A widget, not a window: no Dock icon, just the floating bar and a menu bar item.
+        // A widget, not a window: no Dock icon, just the floating widget and a menu bar item.
         NSApp.setActivationPolicy(.accessory)
         MainActor.assumeIsolated {
             let widget = WidgetController(model: Shared.model)
             widget.show()
-            self.widget = widget
+            Shared.widget = widget
             Task { await SpotifyLauncher.ensureRunning() }
-            if ProcessInfo.processInfo.environment["MOODMIX_STRESS_RESIZE"] != nil {
-                // Development check: flip the widget open and closed to catch layout crashes.
-                Task {
-                    try? await Task.sleep(for: .seconds(6))  // let the playlist load
-                    for i in 0..<40 {
-                        try? await Task.sleep(for: .milliseconds(300))
-                        if i % 4 == 0 { NotificationCenter.default.post(name: .moodMixToggleWidget, object: nil) }
-                        if i % 3 == 0 { NotificationCenter.default.post(name: .moodMixTogglePlaylists, object: nil) }
-                        Shared.model.mood = Mood.allCases[i % Mood.allCases.count]
-                        Shared.model.buildMix()
-                    }
-                    print("stress done")
+            if ProcessInfo.processInfo.environment["MOODMIX_STRESS_RESIZE"] != nil { runStressTest(widget) }
+        }
+    }
+
+    /// Development check: cycles every widget state quickly to catch layout crashes.
+    @MainActor
+    private func runStressTest(_ widget: WidgetController) {
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            for i in 0..<48 {
+                try? await Task.sleep(for: .milliseconds(350))
+                switch i % 8 {
+                case 0: widget.expand()
+                case 2, 3: NotificationCenter.default.post(name: .moodMixTogglePlaylists, object: nil)
+                case 4: widget.collapse()
+                case 5: widget.shrinkToBubble()
+                case 6: widget.restoreFromBubble()
+                default: break
                 }
+                Shared.model.mood = Mood.allCases[i % Mood.allCases.count]
+                Shared.model.buildMix()
             }
+            widget.resetPosition()
+            print("stress done")
         }
     }
 }
@@ -46,16 +56,11 @@ struct MoodMixApp: App {
 
     var body: some Scene {
         MenuBarExtra("MoodMix", systemImage: "waveform") {
-            Button("Show / Hide Widget") { delegate.widget?.toggleVisible() }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-            Button("Open Spotify") { SpotifyLauncher.bringToFront() }
-            Divider()
-            SettingsLink { Text("Settings…") }
-                .keyboardShortcut(",")
-            Divider()
-            Button("Quit MoodMix") { NSApp.terminate(nil) }
-                .keyboardShortcut("q")
+            MenuBarPanel()
+                .environment(Shared.model)
         }
+        .menuBarExtraStyle(.window)
+
         Settings {
             SettingsView()
                 .environment(Shared.model)

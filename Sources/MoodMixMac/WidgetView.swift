@@ -2,187 +2,300 @@ import AppKit
 import MoodMixCore
 import SwiftUI
 
-/// The whole MoodMix UI: a slim bar at the bottom of the screen that springs open into a control card.
+/// The floating widget: a glass bar that grows a card out of itself, or shrinks into a bubble on a screen edge.
 struct WidgetView: View {
     @Environment(AppModel.self) private var model
-    let controller: WidgetController
-    @State private var expanded = false
+    @Environment(WidgetController.self) private var controller
+    @Namespace private var glass
     @State private var showingPlaylists = false
 
     var body: some View {
-        VStack(spacing: 10) {
-            if expanded {
-                ExpandedCard(showingPlaylists: $showingPlaylists)
-                    .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .bottom)))
+        let accent = Shared.palette.accent ?? model.mood.color
+        GlassGroup(spacing: 24) {
+            if controller.mode == .bubble {
+                Bubble(accent: accent)
+                    .glassID("bubble", in: glass)
+                    .transition(.scale(scale: 0.3).combined(with: .opacity))
+            } else {
+                VStack(spacing: WidgetController.gap) {
+                    if controller.cardBelow {
+                        bar(accent)
+                        card(accent)
+                    } else {
+                        card(accent)
+                        bar(accent)
+                    }
+                }
+                .transition(.scale(scale: 0.5).combined(with: .opacity))
             }
-            MiniBar(expanded: expanded, toggle: toggle)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(WidgetController.pad)
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: controller.mode == .bubble ? .center : controller.cardBelow ? .top : .bottom)
+        .environment(\.colorScheme, .dark)
         .foregroundStyle(.white)
-        .preferredColorScheme(.dark)
-        .onReceive(NotificationCenter.default.publisher(for: .moodMixToggleWidget)) { _ in toggle() }
+        .task(id: model.nowPlaying?.track.artworkURL) {
+            await Shared.palette.update(for: model.nowPlaying?.track.artworkURL)
+        }
+        .onChange(of: controller.showCard) { if !controller.showCard { showingPlaylists = false } }
         .onReceive(NotificationCenter.default.publisher(for: .moodMixTogglePlaylists)) { _ in
-            withAnimation(.spring(duration: 0.3)) { showingPlaylists.toggle() }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showingPlaylists.toggle() }
         }
     }
 
-    private func toggle() {
-        if expanded {
-            withAnimation(.spring(duration: 0.3)) {
-                expanded = false
-                showingPlaylists = false
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { controller.resize(expanded: false) }
-        } else {
-            controller.resize(expanded: true)
-            withAnimation(.spring(duration: 0.4, bounce: 0.25).delay(0.05)) { expanded = true }
+    private func bar(_ accent: Color) -> some View {
+        MiniBar(accent: accent)
+            .glassID("bar", in: glass)
+    }
+
+    @ViewBuilder private func card(_ accent: Color) -> some View {
+        if controller.showCard {
+            let anchor: UnitPoint = controller.cardBelow ? .top : .bottom
+            ExpandedCard(accent: accent, showingPlaylists: $showingPlaylists)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { controller.cardHeightChanged($0) }
+                .glassID("card", in: glass)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.35, anchor: anchor)
+                        .combined(with: .opacity)
+                        .combined(with: .offset(y: controller.cardBelow ? -24 : 24)),
+                    removal: .scale(scale: 0.5, anchor: anchor).combined(with: .opacity)))
         }
     }
 }
 
 extension Notification.Name {
-    static let moodMixToggleWidget = Notification.Name("MoodMixToggleWidget")
     static let moodMixTogglePlaylists = Notification.Name("MoodMixTogglePlaylists")
 }
 
-/// Dark glass background shared by the bar and the card.
-private struct Glass: ViewModifier {
-    var radius: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: .rect(cornerRadius: radius))
-            .background(Color.black.opacity(0.55), in: .rect(cornerRadius: radius))
-            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.08)))
-            .shadow(color: .black.opacity(0.45), radius: 10, y: 4)
-    }
-}
-
-private extension View {
-    func glass(radius: CGFloat = 18) -> some View { modifier(Glass(radius: radius)) }
-}
-
-// MARK: - Collapsed bar
+// MARK: - Bar
 
 private struct MiniBar: View {
     @Environment(AppModel.self) private var model
-    let expanded: Bool
-    let toggle: () -> Void
+    @Environment(WidgetController.self) private var controller
+    let accent: Color
     @State private var spotifyOpen = SpotifyLauncher.isRunning
-    private let spotifyCheck = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    private let spotifyCheck = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 12) {
-            nowPlaying
-            Spacer(minLength: 8)
+            NowPlayingLabel()
+                .frame(maxWidth: 220, alignment: .leading)
+            Spacer(minLength: 4)
             if spotifyOpen {
-                transport
+                Transport(size: .regular)
             } else {
-                Button {
-                    SpotifyLauncher.bringToFront()
-                } label: {
+                Button { SpotifyLauncher.bringToFront() } label: {
                     Label("Open Spotify", systemImage: "exclamationmark.circle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                 }
-                .buttonStyle(.plain)
-                .help(SpotifyLauncher.isInstalled ? "Spotify is closed" : "Spotify isn't installed")
+                .buttonStyle(.pressable)
             }
-            Button {
-                Task { await model.generate() }
-            } label: {
-                Label("Generate", systemImage: "sparkles")
-                    .font(.callout.weight(.bold))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Theme.green, in: .capsule)
+            GenerateButton(compact: true)
+            CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble (or drag the bar to a screen edge)") {
+                controller.shrinkToBubble()
             }
-            .buttonStyle(.plain)
-            .disabled(!model.isLoggedIn || model.tracks.isEmpty || model.busy != nil)
-            .help("Play a fresh \(model.mood.title.lowercased()) mix from \(model.selectedPlaylist?.name ?? "your playlist")")
-
-            Button(action: toggle) {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 13, weight: .bold))
-                    .rotationEffect(.degrees(expanded ? 180 : 0))
-                    .frame(width: 30, height: 30)
-                    .background(Theme.chip, in: .circle)
+            CircleIconButton(symbol: controller.cardBelow ? "chevron.down" : "chevron.up",
+                             help: controller.showCard ? "Collapse" : "Moods, playlists and more",
+                             rotation: controller.showCard ? 180 : 0) {
+                controller.toggleExpanded()
             }
-            .buttonStyle(.plain)
-            .help(expanded ? "Collapse" : "Moods, playlists and more")
         }
-        .padding(.horizontal, 12)
-        .frame(height: 64)
-        .glass(radius: 32)
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(width: WidgetController.barSize.width, height: WidgetController.barSize.height)
+        .background { DragHandle(onDragEnded: controller.dragEnded) }
+        .overlay(alignment: .bottom) { ProgressLine().padding(.horizontal, 30).padding(.bottom, 4) }
+        .background(alignment: .leading) {
+            // A wash of the album color across the left of the bar, like Spotify's player.
+            LinearGradient(colors: [accent.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing)
+                .clipShape(Capsule())
+                .allowsHitTesting(false)
+        }
+        .liquidGlass(tint: Color.black.opacity(0.35), in: Capsule())
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
         .onReceive(spotifyCheck) { _ in spotifyOpen = SpotifyLauncher.isRunning }
     }
+}
 
-    @ViewBuilder private var nowPlaying: some View {
-        if let np = model.nowPlaying {
-            HStack(spacing: 10) {
-                Artwork(url: np.track.artworkURL, size: 42, radius: 21)
-                    .rotationEffect(.degrees(0))
+struct NowPlayingLabel: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let np = model.nowPlaying {
+                Artwork(url: np.track.artworkURL, size: 44, radius: 8)
+                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                    .id(np.track.id)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(np.track.name).font(.callout.weight(.semibold)).lineLimit(1)
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         if let mood = model.profiles[np.track.id]?.moods.first { MoodTag(mood: mood) }
-                        Text(np.track.artistLine).font(.caption).foregroundStyle(Theme.subtext).lineLimit(1)
+                        Text(np.track.artistLine).font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                     }
                 }
-            }
-            .frame(maxWidth: 220, alignment: .leading)
-        } else {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.circle.fill").font(.system(size: 34)).foregroundStyle(Theme.green)
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.green, in: .rect(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("MoodMix").font(.callout.weight(.bold))
                     Text(model.statusLine ?? "\(model.mood.title) · \(model.selectedPlaylist?.name ?? "pick a playlist")")
-                        .font(.caption).foregroundStyle(Theme.subtext).lineLimit(1)
+                        .font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
                 }
             }
-            .frame(maxWidth: 220, alignment: .leading)
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: model.nowPlaying?.track.id)
+    }
+}
+
+private struct ProgressLine: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let np = model.nowPlaying {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                GeometryReader { geo in
+                    let fraction = CGFloat(np.progress(at: context.date)) / CGFloat(max(np.track.durationMs, 1))
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.12))
+                        Capsule().fill(Theme.green).frame(width: geo.size.width * min(max(fraction, 0), 1))
+                    }
+                }
+                .frame(height: 2.5)
+            }
+            .allowsHitTesting(false)
         }
     }
+}
 
-    private var transport: some View {
-        HStack(spacing: 14) {
+struct Transport: View {
+    enum Size { case regular, large }
+    @Environment(AppModel.self) private var model
+    var size: Size = .regular
+
+    var body: some View {
+        let big = size == .large
+        HStack(spacing: big ? 22 : 14) {
             Button { Task { await model.skipPrevious() } } label: { Image(systemName: "backward.fill") }
             Button { Task { await model.togglePlayPause() } } label: {
                 Image(systemName: model.nowPlaying?.isPlaying == true ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14))
+                    .contentTransition(.symbolEffect(.replace))
+                    .font(.system(size: big ? 17 : 14))
                     .foregroundStyle(.black)
-                    .frame(width: 30, height: 30)
+                    .frame(width: big ? 40 : 32, height: big ? 40 : 32)
                     .background(.white, in: .circle)
             }
             Button { Task { await model.skipNext() } } label: { Image(systemName: "forward.fill") }
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 13))
-        .foregroundStyle(Theme.subtext)
+        .buttonStyle(.pressable)
+        .font(.system(size: big ? 16 : 13))
+        .foregroundStyle(.white.opacity(0.85))
         .disabled(model.nowPlaying == nil)
     }
 }
 
-// MARK: - Expanded card
+struct GenerateButton: View {
+    @Environment(AppModel.self) private var model
+    var compact = false
+
+    var body: some View {
+        Button { Task { await model.generate() } } label: {
+            Label("Generate", systemImage: "sparkles")
+                .font((compact ? Font.callout : .body).weight(.bold))
+                .frame(maxWidth: compact ? nil : .infinity)
+                .padding(.horizontal, compact ? 14 : 18)
+                .padding(.vertical, compact ? 8 : 11)
+                .foregroundStyle(.black)
+                .background(Theme.green.gradient, in: .capsule)
+                .shadow(color: Theme.green.opacity(0.35), radius: 8, y: 2)
+        }
+        .buttonStyle(.pressable)
+        .disabled(!model.isLoggedIn || model.tracks.isEmpty || model.busy != nil)
+        .help("Play a fresh \(model.mood.title.lowercased()) mix from \(model.selectedPlaylist?.name ?? "your playlist")")
+    }
+}
+
+private struct CircleIconButton: View {
+    let symbol: String
+    let help: String
+    var rotation: Double = 0
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .rotationEffect(.degrees(rotation))
+                .frame(width: 30, height: 30)
+                .liquidGlass(interactive: true, in: Circle())
+                .contentShape(.circle)
+        }
+        .buttonStyle(.pressable)
+        .help(help)
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: rotation)
+    }
+}
+
+// MARK: - Bubble
+
+private struct Bubble: View {
+    @Environment(AppModel.self) private var model
+    @Environment(WidgetController.self) private var controller
+    let accent: Color
+
+    var body: some View {
+        let d = WidgetController.bubbleDiameter
+        ZStack {
+            if let np = model.nowPlaying {
+                Artwork(url: np.track.artworkURL, size: d - 14, radius: (d - 14) / 2)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let fraction = CGFloat(np.progress(at: context.date)) / CGFloat(max(np.track.durationMs, 1))
+                    Circle()
+                        .trim(from: 0, to: min(max(fraction, 0), 1))
+                        .stroke(Theme.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: d - 6, height: d - 6)
+                }
+                if !np.isPlaying {
+                    Image(systemName: "pause.fill").font(.system(size: 14, weight: .bold))
+                        .padding(6).background(.black.opacity(0.5), in: .circle)
+                }
+            } else {
+                Image(systemName: "waveform").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.green)
+            }
+        }
+        .frame(width: d, height: d)
+        .liquidGlass(tint: accent.opacity(0.4), in: Circle())
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        .overlay { DragHandle(onClick: controller.restoreFromBubble, onDragEnded: controller.dragEnded) }
+        .help("Click to open · drag away from the edge to move")
+    }
+}
+
+// MARK: - Card
 
 private struct ExpandedCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(WidgetController.self) private var controller
+    let accent: Color
     @Binding var showingPlaylists: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             if !model.isLoggedIn {
                 LoginSection()
             } else {
-                playlistHeader
+                header
                 if showingPlaylists {
-                    PlaylistPicker { showingPlaylists = false }
+                    PlaylistPicker { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showingPlaylists = false } }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
                     Controls()
-                        .transition(.opacity)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
                 }
             }
             if let error = model.errorMessage {
@@ -190,33 +303,37 @@ private struct ExpandedCard: View {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                     Text(error).font(.caption).fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button { model.dismissError() } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+                    Button { model.dismissError() } label: { Image(systemName: "xmark") }.buttonStyle(.pressable)
                 }
                 .padding(10)
-                .background(.orange.opacity(0.15), in: .rect(cornerRadius: 10))
+                .background(.orange.opacity(0.15), in: .rect(cornerRadius: 12))
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(18)
+        .frame(width: WidgetController.barSize.width)
+        .fixedSize(horizontal: false, vertical: true)
+        .background { DragHandle(onDragEnded: controller.dragEnded) }
         .background(alignment: .top) {
-            LinearGradient(colors: [model.mood.color.opacity(0.55), .clear], startPoint: .top, endPoint: .center)
-                .clipShape(.rect(cornerRadius: 22))
-                .animation(.easeInOut(duration: 0.4), value: model.mood)
+            LinearGradient(colors: [accent.opacity(0.7), accent.opacity(0.15), .clear], startPoint: .top, endPoint: .bottom)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .allowsHitTesting(false)
         }
-        .glass(radius: 22)
+        .liquidGlass(tint: Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
     }
 
-    private var playlistHeader: some View {
+    private var header: some View {
         HStack(spacing: 12) {
             Button {
-                withAnimation(.spring(duration: 0.3)) { showingPlaylists.toggle() }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showingPlaylists.toggle() }
             } label: {
                 HStack(spacing: 12) {
-                    Artwork(url: model.selectedPlaylist?.imageURL, size: 46, radius: 6)
+                    Artwork(url: model.selectedPlaylist?.imageURL, size: 52, radius: 8)
+                        .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("PLAYLIST").font(.caption2.weight(.bold)).foregroundStyle(Theme.subtext)
+                        Text("PLAYLIST").font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.65))
                         HStack(spacing: 6) {
-                            Text(model.selectedPlaylist?.name ?? "Choose a playlist").font(.title3.weight(.bold)).lineLimit(1)
+                            Text(model.selectedPlaylist?.name ?? "Choose a playlist").font(.title3.weight(.heavy)).lineLimit(1)
                             Image(systemName: "chevron.down")
                                 .font(.caption.weight(.bold))
                                 .rotationEffect(.degrees(showingPlaylists ? 180 : 0))
@@ -225,12 +342,18 @@ private struct ExpandedCard: View {
                 }
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             Spacer()
-            SettingsLink { Image(systemName: "gearshape.fill").foregroundStyle(Theme.subtext) }
-                .buttonStyle(.plain)
-                .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
-                .help("Settings")
+            CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble") { controller.shrinkToBubble() }
+            SettingsLink {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .frame(width: 30, height: 30)
+                    .liquidGlass(interactive: true, in: Circle())
+            }
+            .buttonStyle(.pressable)
+            .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
+            .help("Settings")
         }
     }
 }
@@ -240,32 +363,36 @@ private struct PlaylistPicker: View {
     let done: () -> Void
 
     var body: some View {
+        let rowHeight: CGFloat = 56
         ScrollView {
-            LazyVStack(spacing: 2) {
+            LazyVStack(spacing: 4) {
                 ForEach(model.playlists) { playlist in
                     let selected = playlist.id == model.selectedPlaylistID
                     Button {
                         model.selectedPlaylistID = playlist.id
-                        withAnimation(.spring(duration: 0.3)) { done() }
+                        done()
                     } label: {
                         HStack(spacing: 12) {
-                            Artwork(url: playlist.imageURL, size: 40)
+                            Artwork(url: playlist.imageURL, size: 44, radius: 6)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(playlist.name).foregroundStyle(selected ? Theme.green : .white).lineLimit(1)
-                                Text("\(playlist.trackCount) songs").font(.caption).foregroundStyle(Theme.subtext)
+                                Text(playlist.name).font(.callout.weight(.semibold))
+                                    .foregroundStyle(selected ? Theme.green : .white).lineLimit(1)
+                                Text("Playlist · \(playlist.trackCount) songs").font(.caption).foregroundStyle(.white.opacity(0.6))
                             }
                             Spacer()
-                            if selected { Image(systemName: "checkmark").foregroundStyle(Theme.green) }
+                            if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.green) }
                         }
                         .padding(6)
-                        .background(selected ? Theme.hover : .clear, in: .rect(cornerRadius: 8))
+                        .frame(height: rowHeight - 4)
+                        .background(selected ? Color.white.opacity(0.1) : .clear, in: .rect(cornerRadius: 10))
                         .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                 }
             }
         }
         .scrollIndicators(.never)
+        .frame(height: CGFloat(min(max(model.playlists.count, 1), 6)) * rowHeight)
     }
 }
 
@@ -277,23 +404,26 @@ private struct Controls: View {
         VStack(alignment: .leading, spacing: 14) {
             status
 
-            section("Mood")
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
-                ForEach(Mood.allCases) { mood in
-                    Pill(title: mood.title, symbol: mood.symbol, selected: model.mood == mood, compact: true) {
-                        withAnimation(.easeInOut(duration: 0.2)) { model.mood = mood }
+            GlassGroup(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    section("Mood")
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                        ForEach(Mood.allCases) { mood in
+                            GlassPill(title: mood.title, symbol: mood.symbol, selected: model.mood == mood, fill: true) {
+                                withAnimation(.easeInOut(duration: 0.25)) { model.mood = mood }
+                            }
+                        }
+                    }
+                    section("Energy").padding(.top, 6)
+                    HStack(spacing: 8) {
+                        ForEach(EnergyArc.allCases) { arc in
+                            GlassPill(title: arc.title, selected: model.arc == arc, fill: true) { model.arc = arc }
+                        }
                     }
                 }
             }
 
-            section("Energy")
-            HStack(spacing: 8) {
-                ForEach(EnergyArc.allCases) { arc in
-                    Pill(title: arc.title, selected: model.arc == arc, compact: true) { model.arc = arc }
-                }
-            }
-
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
                 Menu {
                     Picker("Length", selection: $model.minutes) {
                         ForEach([30, 45, 60, 90, 120, 180, 240], id: \.self) { Text("\($0) min").tag($0) }
@@ -307,39 +437,30 @@ private struct Controls: View {
 
                 HStack(spacing: 8) {
                     Image(systemName: "heart.fill").foregroundStyle(Theme.green)
-                    Text("Favorites").font(.caption).foregroundStyle(Theme.subtext)
+                    Text("Favorites").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
                     Slider(value: $model.favoriteWeight, in: 0...1).tint(Theme.green)
                 }
                 .help("How much your most-played and liked songs count")
             }
 
             HStack(spacing: 8) {
-                Button { Task { await model.generate() } } label: {
-                    Label("Generate", systemImage: "sparkles")
-                        .font(.callout.weight(.bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .foregroundStyle(.black)
-                        .background(Theme.green, in: .capsule)
-                }
-                .disabled(model.tracks.isEmpty || model.busy != nil)
-
+                GenerateButton()
                 actionButton("Match", symbol: "dot.radiowaves.left.and.right",
                              help: "Queue songs from this playlist that fit what's playing now") {
                     await model.matchCurrentSong()
                 }
                 .disabled(model.nowPlaying == nil || model.busy != nil)
-
-                actionButton(model.needsAnalysis ? "Analyze" : "Analyzed", symbol: model.needsAnalysis ? "waveform.badge.magnifyingglass" : "checkmark",
+                actionButton(model.needsAnalysis ? "Analyze" : "Analyzed",
+                             symbol: model.needsAnalysis ? "waveform.badge.magnifyingglass" : "checkmark",
                              help: "Label moods for songs that don't have one yet") {
                     await model.analyze()
                 }
                 .disabled(!model.needsAnalysis || model.analysisStatus != nil)
             }
-            .buttonStyle(.plain)
 
-            upNext
+            if !model.mix.isEmpty { upNext.transition(.opacity.combined(with: .move(edge: .bottom))) }
         }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.mix.isEmpty)
     }
 
     private var status: some View {
@@ -356,34 +477,33 @@ private struct Controls: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(Theme.subtext)
+        .foregroundStyle(.white.opacity(0.7))
         .lineLimit(1)
     }
 
-    @ViewBuilder private var upNext: some View {
-        if !model.mix.isEmpty {
+    private var upNext: some View {
+        let rowHeight: CGFloat = 46
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 section("Up next")
                 Spacer()
                 let minutes = model.mix.map(\.track.durationMs).reduce(0, +) / 60_000
-                Text("\(model.mix.count) songs · \(minutes) min").font(.caption).foregroundStyle(Theme.subtext)
+                Text("\(model.mix.count) songs · \(minutes) min").font(.caption).foregroundStyle(.white.opacity(0.6))
             }
             ScrollView {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: 2) {
                     ForEach(Array(model.mix.enumerated()), id: \.element.id) { i, entry in
-                        UpNextRow(index: i, entry: entry)
+                        UpNextRow(index: i, entry: entry).frame(height: rowHeight - 2)
                     }
                 }
             }
             .scrollIndicators(.never)
-            .frame(maxHeight: .infinity)
-        } else {
-            Spacer(minLength: 0)
+            .frame(height: CGFloat(min(model.mix.count, 5)) * rowHeight)
         }
     }
 
     private func section(_ title: String) -> some View {
-        Text(title.uppercased()).font(.caption2.weight(.bold)).foregroundStyle(Theme.subtext)
+        Text(title.uppercased()).font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.6))
     }
 
     private func actionButton(_ title: String, symbol: String, help: String, action: @escaping () async -> Void) -> some View {
@@ -391,9 +511,11 @@ private struct Controls: View {
             Label(title, systemImage: symbol)
                 .font(.callout.weight(.semibold))
                 .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Theme.chip, in: .capsule)
+                .padding(.vertical, 11)
+                .liquidGlass(interactive: true, in: Capsule())
+                .contentShape(.capsule)
         }
+        .buttonStyle(.pressable)
         .help(help)
     }
 }
@@ -407,15 +529,20 @@ private struct UpNextRow: View {
     var body: some View {
         let isCurrent = model.nowPlaying?.track.id == entry.id
         HStack(spacing: 10) {
-            Artwork(url: entry.track.artworkURL, size: 32)
+            ZStack {
+                Artwork(url: entry.track.artworkURL, size: 36, radius: 6)
+                if hovering {
+                    Image(systemName: "play.fill").font(.caption).padding(6).background(.black.opacity(0.55), in: .circle)
+                }
+            }
             VStack(alignment: .leading, spacing: 1) {
-                Text(entry.track.name).font(.callout).lineLimit(1).foregroundStyle(isCurrent ? Theme.green : .white)
-                Text(entry.track.artistLine).font(.caption).lineLimit(1).foregroundStyle(Theme.subtext)
+                Text(entry.track.name).font(.callout.weight(.medium)).lineLimit(1).foregroundStyle(isCurrent ? Theme.green : .white)
+                Text(entry.track.artistLine).font(.caption).lineLimit(1).foregroundStyle(.white.opacity(0.6))
             }
             Spacer()
             if entry.favoriteScore > 0 { Image(systemName: "heart.fill").font(.caption2).foregroundStyle(Theme.green) }
             if let f = entry.profile?.features {
-                Text("\(Int(f.tempo.rounded())) bpm").font(.caption.monospacedDigit()).foregroundStyle(Theme.subtext)
+                Text("\(Int(f.tempo.rounded())) bpm").font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.6))
             }
             if let blend = entry.transition {
                 Circle()
@@ -425,11 +552,11 @@ private struct UpNextRow: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(hovering ? Theme.hover : .clear, in: .rect(cornerRadius: 6))
+        .background(hovering ? Color.white.opacity(0.08) : .clear, in: .rect(cornerRadius: 8))
         .contentShape(.rect)
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { Task { await model.playMix(from: index) } }
+        .onTapGesture { Task { await model.playMix(from: index) } }
+        .help("Play from here")
     }
 }
 
@@ -441,14 +568,14 @@ private struct LoginSection: View {
             Image(systemName: "waveform.circle.fill").font(.system(size: 56)).foregroundStyle(Theme.green)
             Text("MoodMix").font(.system(size: 32, weight: .black))
             Text("Mood-based, smoothly ordered mixes from your own Spotify playlists.")
-                .font(.callout).foregroundStyle(Theme.subtext).multilineTextAlignment(.center)
+                .font(.callout).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
             if model.clientID.isEmpty {
                 SettingsLink {
                     Text("Add Spotify Client ID").bold().foregroundStyle(.black)
                         .padding(.horizontal, 24).padding(.vertical, 10)
                         .background(.white, in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
             } else {
                 Button {
@@ -458,10 +585,11 @@ private struct LoginSection: View {
                         .padding(.horizontal, 24).padding(.vertical, 10)
                         .background(Theme.green, in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .disabled(model.busy != nil)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
     }
 }
