@@ -1,8 +1,10 @@
 # MoodMix
 
-A custom Spotify client for Premium users. Pick a mood and MoodMix builds a queue **only from your own playlist** (no suggested tracks), leaning on your favorites. It orders the songs so each one flows into the next, then plays them on your Spotify.
+A floating Spotify widget for Premium users. Pick a mood and MoodMix builds a queue **only from your own playlist** (no suggested tracks), leaning on your favorites. It orders the songs so each one flows into the next, then plays them on your Spotify.
 
-macOS app first. The core (`MoodMixCore`) is platform-neutral, so the iOS app can reuse it.
+On macOS it lives as a slim bar at the bottom of your screen (no window, no Dock icon). Click the chevron to spring it open: switch playlists, pick a mood and energy shape, set favorites weight, then **Generate**, **Match** (queue songs that fit what's playing now) or **Analyze**. It launches Spotify in the background if it isn't open. Settings and Quit live in the menu bar icon.
+
+macOS first. The core (`MoodMixCore`) is platform-neutral, so the iOS app can reuse it.
 
 ## How it works
 
@@ -31,8 +33,8 @@ Spotify doesn't let other apps process its audio, so the actual crossfade comes 
    ```bash
    swift run MoodMix
    ```
-4. In **MoodMix → Settings** (⌘,), paste your Spotify Client ID and Anthropic key.
-5. Log in, pick your playlist, click **Analyze moods**, choose a mood, then **Build mix** and **Play on Spotify**.
+4. From the MoodMix menu bar icon → **Settings…**, paste your Spotify Client ID and Anthropic key.
+5. Expand the widget, log in, pick your playlist (moods are labeled automatically, and new songs you add in Spotify are picked up within a minute), choose a mood and press **Generate**.
 
 Keep the Spotify app open on some device (Mac or phone) so there's somewhere to play.
 

@@ -115,12 +115,32 @@ public struct SpotifyAPI: Sendable {
 
     /// Plays exactly these tracks, in this order, on the active (or first available) device.
     public func play(uris: [String]) async throws {
-        let devices = try await devices()
-        guard let device = devices.first(where: \.is_active) ?? devices.first(where: { $0.type == "Computer" }) ?? devices.first,
-              let deviceID = device.id else { throw SpotifyError.noActiveDevice }
+        let deviceID = try await playbackDeviceID()
         try await send("PUT", endpoint("me/player/shuffle", ["state": "false", "device_id": deviceID]))
         let body = try JSONSerialization.data(withJSONObject: ["uris": Array(uris.prefix(100))])
         try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: body)
+    }
+
+    /// Adds tracks to "Next up", after whatever is playing now.
+    public func addToQueue(uris: [String]) async throws {
+        let deviceID = try await playbackDeviceID()
+        for uri in uris {
+            try await send("POST", endpoint("me/player/queue", ["uri": uri, "device_id": deviceID]))
+        }
+    }
+
+    /// The active device, else this computer, else any device. A freshly launched Spotify
+    /// takes a few seconds to register, so keep asking for a while.
+    private func playbackDeviceID() async throws -> String {
+        for attempt in 0..<10 {
+            let devices = try await devices()
+            if let device = devices.first(where: \.is_active) ?? devices.first(where: { $0.type == "Computer" }) ?? devices.first,
+               let id = device.id {
+                return id
+            }
+            if attempt < 9 { try await Task.sleep(for: .seconds(1)) }
+        }
+        throw SpotifyError.noActiveDevice
     }
 
     // MARK: Plumbing

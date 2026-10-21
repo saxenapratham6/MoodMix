@@ -18,8 +18,12 @@ public struct MixRequest: Sendable {
     public var arc: EnergyArc
     /// Different seeds give different (but equally on-mood) mixes.
     public var seed: UInt64
+    /// When set, the mix starts from this track (used by "Match" to continue from the current song).
+    public var startTrackID: String?
 
-    public init(mood: Mood, minutes: Int = 60, favoriteWeight: Double = 0.4, arc: EnergyArc = .steady, seed: UInt64 = .random(in: 0...UInt64.max)) {
+    public init(mood: Mood, minutes: Int = 60, favoriteWeight: Double = 0.4, arc: EnergyArc = .steady,
+                seed: UInt64 = .random(in: 0...UInt64.max), startTrackID: String? = nil) {
+        self.startTrackID = startTrackID
         self.mood = mood
         self.minutes = minutes
         self.favoriteWeight = favoriteWeight
@@ -168,6 +172,10 @@ public enum MixBuilder {
             picked.append(c)
             total += c.track.durationMs
         }
+        if let startID = request.startTrackID, let start = scored.first(where: { $0.track.id == startID }) {
+            picked.removeAll { $0.track.id == startID }
+            picked.insert(start, at: 0)
+        }
         guard !picked.isEmpty else { return [] }
 
         // Order greedily for smooth transitions that follow the chosen energy arc.
@@ -183,7 +191,7 @@ public enum MixBuilder {
         }
 
         var remaining = picked
-        let firstIndex = remaining.indices.max {
+        let firstIndex = request.startTrackID != nil && remaining[0].track.id == request.startTrackID ? 0 : remaining.indices.max {
             energyFit(remaining[$0], 0) + remaining[$0].fav * 0.3 < energyFit(remaining[$1], 0) + remaining[$1].fav * 0.3
         }!
         var ordered = [remaining.remove(at: firstIndex)]

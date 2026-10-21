@@ -50,17 +50,19 @@ struct Pill: View {
     let title: String
     var symbol: String? = nil
     let selected: Bool
+    var compact = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if let symbol { Image(systemName: symbol) }
-                Text(title)
+                Text(title).lineLimit(1)
             }
-            .font(.callout.weight(.medium))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .font(compact ? .caption.weight(.medium) : .callout.weight(.medium))
+            .frame(maxWidth: compact ? .infinity : nil)
+            .padding(.horizontal, compact ? 10 : 14)
+            .padding(.vertical, compact ? 6 : 7)
             .foregroundStyle(selected ? .black : .white)
             .background(selected ? Color.white : Theme.chip, in: .capsule)
             .contentShape(.capsule)

@@ -56,4 +56,14 @@ final class MixBuilderTests: XCTestCase {
         let energies = mix.compactMap { $0.profile?.features?.energy }
         XCTAssertLessThan(energies.prefix(3).reduce(0, +), energies.suffix(3).reduce(0, +))
     }
+
+    func testMixStartsFromRequestedTrack() {
+        let tracks = (0..<20).map { Track(id: "t\($0)", uri: "u\($0)", name: "\($0)", artists: ["a\($0)"], album: "", durationMs: 200_000, addedAt: nil) }
+        var profiles = Dictionary(uniqueKeysWithValues: tracks.map { ($0.id, TrackProfile(moods: [.happy])) })
+        profiles["t5"] = TrackProfile(moods: [.sad])  // off-mood, but it's what's playing
+        let mix = MixBuilder.build(tracks: tracks, profiles: profiles, favorites: FavoriteSignals(),
+                                   request: MixRequest(mood: .happy, minutes: 30, seed: 2, startTrackID: "t5"))
+        XCTAssertEqual(mix.first?.id, "t5")
+        XCTAssertEqual(mix.filter { $0.id == "t5" }.count, 1)
+    }
 }

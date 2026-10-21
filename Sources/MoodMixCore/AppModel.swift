@@ -37,6 +37,9 @@ public final class AppModel {
     public private(set) var nowPlaying: NowPlaying?
     public private(set) var errorMessage: String?
 
+    /// Platform hook run before playback, e.g. launching the Spotify app on macOS.
+    @ObservationIgnored public var beforePlayback: (@MainActor () async -> Void)?
+
     private var auth: SpotifyAuth
     private let store = ProfileStore()
     private var snapshotID: String?
@@ -198,8 +201,34 @@ public final class AppModel {
         await play(mix[index...].map(\.track))
     }
 
+    /// A fresh mix for the selected mood, played right away.
+    public func generate() async {
+        buildMix()
+        guard !mix.isEmpty else { return }
+        await play(mix.map(\.track))
+    }
+
+    /// Takes the mood of the song playing now and queues matching songs from the playlist after it.
+    public func matchCurrentSong() async {
+        guard let current = nowPlaying?.track else {
+            errorMessage = "Play something first, then Match finds songs from your playlist that fit it."
+            return
+        }
+        if let topMood = profiles[current.id]?.moods.first { mood = topMood }
+        let request = MixRequest(mood: mood, minutes: minutes, favoriteWeight: favoriteWeight, arc: arc,
+                                 startTrackID: tracks.contains { $0.id == current.id } ? current.id : nil)
+        mix = MixBuilder.build(tracks: tracks, profiles: profiles, favorites: favorites, request: request)
+        let upNext = mix.filter { $0.id != current.id }.prefix(30).map(\.track.uri)
+        guard !upNext.isEmpty else { return }
+        await run("Queueing \(upNext.count) \(mood.title.lowercased()) songs…") {
+            await self.beforePlayback?()
+            try await self.api.addToQueue(uris: Array(upNext))
+        }
+    }
+
     public func play(_ tracks: [Track]) async {
         await run("Starting playback…") {
+            await self.beforePlayback?()
             try await self.api.play(uris: tracks.map(\.uri))
         }
         await refreshPlayback()
