@@ -1,7 +1,7 @@
 import Foundation
 
 /// How much the listener loves a track, from Spotify's top-tracks and Liked Songs.
-public struct FavoriteSignals: Sendable {
+public struct FavoriteSignals: Codable, Sendable {
     /// Spotify track ID -> 0...1 (1 = most played recently).
     public var scores: [String: Double]
 

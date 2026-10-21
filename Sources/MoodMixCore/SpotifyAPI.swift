@@ -158,6 +158,13 @@ public struct SpotifyAPI: Sendable {
 
     @discardableResult
     func send(_ method: String, _ url: URL, body: Data? = nil, attempt: Int = 0) async throws -> Data {
+        // While Spotify has asked us to back off, don't send anything: requests made
+        // during a cool-down count against the quota and push the reset further out.
+        if let until = await RateLimit.shared.blockedUntil {
+            let wait = until.timeIntervalSinceNow
+            guard wait <= 5 else { throw SpotifyError.rateLimited(until: until) }
+            try await Task.sleep(for: .seconds(wait))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("Bearer \(try await auth.accessToken())", forHTTPHeaderField: "Authorization")
@@ -170,15 +177,34 @@ public struct SpotifyAPI: Sendable {
         switch http.statusCode {
         case 200..<300:
             return data
-        case 429 where attempt < 4:
+        case 429:
             let wait = Double(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? Double(2 << attempt)
-            try await Task.sleep(for: .seconds(min(wait, 30)))
+            let until = Date().addingTimeInterval(wait)
+            await RateLimit.shared.block(until: until)
+            // Short pauses are worth waiting out; long ones (quota exceeded) are reported instead.
+            guard wait <= 5, attempt < 2 else { throw SpotifyError.rateLimited(until: until) }
+            try await Task.sleep(for: .seconds(wait))
             return try await send(method, url, body: body, attempt: attempt + 1)
         case 404 where url.path.contains("/me/player"):
             throw SpotifyError.noActiveDevice
         default:
             throw SpotifyError.http(http.statusCode, String(decoding: data, as: UTF8.self))
         }
+    }
+}
+
+/// Shared back-off state, so one 429 pauses every request (playback polling included).
+public actor RateLimit {
+    public static let shared = RateLimit()
+    private var until: Date?
+
+    public var blockedUntil: Date? {
+        guard let until, until > Date() else { return nil }
+        return until
+    }
+
+    func block(until date: Date) {
+        until = max(until ?? date, date)
     }
 }
 

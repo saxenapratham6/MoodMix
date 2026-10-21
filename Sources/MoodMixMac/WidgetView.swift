@@ -138,7 +138,7 @@ private struct MiniBar: View {
                 Image(systemName: "waveform.circle.fill").font(.system(size: 34)).foregroundStyle(Theme.green)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("MoodMix").font(.callout.weight(.bold))
-                    Text(model.busy ?? model.analysisStatus ?? "\(model.mood.title) · \(model.selectedPlaylist?.name ?? "pick a playlist")")
+                    Text(model.statusLine ?? "\(model.mood.title) · \(model.selectedPlaylist?.name ?? "pick a playlist")")
                         .font(.caption).foregroundStyle(Theme.subtext).lineLimit(1)
                 }
             }
@@ -344,8 +344,12 @@ private struct Controls: View {
 
     private var status: some View {
         HStack(spacing: 8) {
-            if let s = model.busy ?? model.analysisStatus {
-                ProgressView().controlSize(.mini)
+            if let s = model.statusLine {
+                if model.rateLimitedUntil != nil {
+                    Image(systemName: "hourglass").foregroundStyle(.orange)
+                } else {
+                    ProgressView().controlSize(.mini)
+                }
                 Text(s)
             } else {
                 Text("\(model.tracks.count) songs · \(model.taggedCount) with moods · \(model.favoriteCount) favorites")

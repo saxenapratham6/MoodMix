@@ -40,10 +40,15 @@ public final class AppModel {
     /// Platform hook run before playback, e.g. launching the Spotify app on macOS.
     @ObservationIgnored public var beforePlayback: (@MainActor () async -> Void)?
 
+    /// When Spotify's quota resets, while MoodMix is backing off.
+    public private(set) var rateLimitedUntil: Date?
+
     private var auth: SpotifyAuth
     private let store = ProfileStore()
-    private var snapshotID: String?
+    private let libraryCache = LibraryCache()
+    private var library = LibrarySnapshot()
     private var analyzing = false
+    private var lastLibraryAttempt = Date.distantPast
 
     public init() {
         clientID = UserDefaults.standard.string(forKey: "spotify.clientID") ?? ""
@@ -53,8 +58,13 @@ public final class AppModel {
         auth = SpotifyAuth(clientID: UserDefaults.standard.string(forKey: "spotify.clientID") ?? "")
         Task {
             profiles = await store.all()
+            // Show the saved library instantly; refresh from Spotify after.
+            library = await libraryCache.load()
+            playlists = library.playlists
+            favorites = library.favorites ?? FavoriteSignals()
+            if let id = selectedPlaylistID, let cached = library.tracks[id] { tracks = cached.tracks }
             isLoggedIn = await auth.isLoggedIn
-            if isLoggedIn { await run("Loading playlists…") { try await self.loadLibrary() } }
+            if isLoggedIn { await refreshLibrary() }
             await backgroundLoop()
         }
     }
@@ -74,8 +84,8 @@ public final class AppModel {
         await run("Waiting for Spotify login in your browser…") {
             try await self.auth.logIn(using: provider)
             self.isLoggedIn = true
-            try await self.loadLibrary()
         }
+        if isLoggedIn { await refreshLibrary() }
     }
 
     public func logOut() async {
@@ -85,39 +95,67 @@ public final class AppModel {
         tracks = []
         mix = []
         nowPlaying = nil
+        library = LibrarySnapshot()
+        await libraryCache.save(library)
     }
 
     // MARK: Playlist
 
-    public func loadPlaylist() async {
-        guard isLoggedIn, let id = selectedPlaylistID else { return }
-        mix = []
-        await run("Loading playlist…") {
-            self.snapshotID = try? await self.api.playlistSnapshot(id)
-            self.tracks = try await self.api.tracks(inPlaylist: id) { n in
-                Task { @MainActor in self.busy = "Loading playlist… \(n) songs" }
-            }
-            self.busy = "Reading your favorites…"
-            self.favorites = try await self.api.favoriteSignals()
+    /// Refreshes the playlist list (one request), then the selected playlist's songs only if they changed.
+    public func refreshLibrary() async {
+        guard isLoggedIn else { return }
+        lastLibraryAttempt = Date()
+        let label = playlists.isEmpty ? "Loading playlists…" : nil
+        await run(label) {
+            self.playlists = try await self.api.myPlaylists()
+            self.library.playlists = self.playlists
+            await self.libraryCache.save(self.library)
         }
-        await analyze()
+        await loadPlaylist()
     }
 
-    /// Re-reads the playlist if it changed in Spotify, then labels any new songs.
-    func syncIfPlaylistChanged() async {
-        guard isLoggedIn, busy == nil, !analyzing, let id = selectedPlaylistID,
-              let snapshot = try? await api.playlistSnapshot(id), snapshot != snapshotID else { return }
-        guard let fresh = try? await api.tracks(inPlaylist: id) else { return }
-        let known = Set(tracks.map(\.id))
-        let added = fresh.filter { !known.contains($0.id) }.count
-        tracks = fresh
-        snapshotID = snapshot
-        if added > 0 { analysisStatus = "\(added) new song\(added == 1 ? "" : "s") found in Spotify" }
-        await analyze()
-        if let i = playlists.firstIndex(where: { $0.id == id }) {
-            let p = playlists[i]
-            playlists[i] = Playlist(id: p.id, name: p.name, trackCount: fresh.count, imageURL: p.imageURL, snapshotID: snapshot)
+    /// Uses the saved songs when the playlist hasn't changed; otherwise downloads it again.
+    public func loadPlaylist() async {
+        guard isLoggedIn, let id = selectedPlaylistID else { return }
+        let cached = library.tracks[id]
+        if let cached, tracks.map(\.id) != cached.tracks.map(\.id) {
+            tracks = cached.tracks
+            mix = []
         }
+        let snapshot = playlists.first { $0.id == id }?.snapshotID
+        let needsTracks = cached == nil || snapshot == nil || cached?.snapshotID != snapshot
+        let needsFavorites = library.favorites == nil || (library.favoritesFetchedAt ?? .distantPast) < Date().addingTimeInterval(-6 * 3600)
+        guard needsTracks || needsFavorites else {
+            await analyze()
+            return
+        }
+
+        await run(cached == nil ? "Loading playlist…" : nil) {
+            if needsTracks {
+                let known = Set(cached?.tracks.map(\.id) ?? [])
+                let fresh = try await self.api.tracks(inPlaylist: id) { n in
+                    Task { @MainActor in if cached == nil { self.busy = "Loading playlist… \(n) songs" } }
+                }
+                guard self.selectedPlaylistID == id else { return }
+                if cached != nil {
+                    let added = fresh.filter { !known.contains($0.id) }.count
+                    if added > 0 { self.analysisStatus = "\(added) new song\(added == 1 ? "" : "s") found in Spotify" }
+                } else {
+                    self.mix = []
+                }
+                self.tracks = fresh
+                self.library.tracks[id] = .init(snapshotID: snapshot, tracks: fresh)
+                await self.libraryCache.save(self.library)
+            }
+            if needsFavorites {
+                if cached == nil { self.busy = "Reading your favorites…" }
+                self.favorites = try await self.api.favoriteSignals()
+                self.library.favorites = self.favorites
+                self.library.favoritesFetchedAt = Date()
+                await self.libraryCache.save(self.library)
+            }
+        }
+        await analyze()
     }
 
     // MARK: Analysis
@@ -244,18 +282,32 @@ public final class AppModel {
 
     public func dismissError() { errorMessage = nil }
 
+    /// One line for the widget: what MoodMix is doing right now, if anything.
+    public var statusLine: String? {
+        if let until = rateLimitedUntil {
+            return "Spotify asked us to slow down · back at \(until.formatted(date: .omitted, time: .shortened))"
+        }
+        return busy ?? analysisStatus
+    }
+
     // MARK: Helpers
 
-    /// Polls playback every 2 s and checks the playlist for changes every minute.
+    /// Polls playback every 5 s and checks for playlist edits every 2 minutes, pausing while rate-limited.
     private func backgroundLoop() async {
         var tick = 0
         while !Task.isCancelled {
-            if isLoggedIn {
+            rateLimitedUntil = await RateLimit.shared.blockedUntil
+            if isLoggedIn, rateLimitedUntil == nil {
                 await refreshPlayback()
-                if tick % 30 == 29 { await syncIfPlaylistChanged() }
+                let libraryMissing = playlists.isEmpty || (selectedPlaylistID != nil && tracks.isEmpty)
+                if libraryMissing, busy == nil, Date().timeIntervalSince(lastLibraryAttempt) > 30 {
+                    await refreshLibrary()
+                } else if tick % 24 == 23, busy == nil, !analyzing {
+                    await refreshLibrary()
+                }
             }
             tick += 1
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(5))
         }
     }
 
@@ -268,11 +320,6 @@ public final class AppModel {
         do { try await action(api) } catch { errorMessage = error.localizedDescription }
         try? await Task.sleep(for: .milliseconds(300))
         await refreshPlayback()
-    }
-
-    private func loadLibrary() async throws {
-        playlists = try await api.myPlaylists()
-        if selectedPlaylistID != nil, tracks.isEmpty { Task { await loadPlaylist() } }
     }
 
     private func save(_ changes: [String: TrackProfile]) async {
@@ -288,10 +335,16 @@ public final class AppModel {
 
     private func rebuildAuth() { auth = SpotifyAuth(clientID: clientID) }
 
-    private func run(_ label: String, _ work: @escaping () async throws -> Void) async {
-        busy = label
+    private func run(_ label: String?, _ work: @escaping () async throws -> Void) async {
+        if let label { busy = label }
         errorMessage = nil
-        do { try await work() } catch { errorMessage = error.localizedDescription }
+        do {
+            try await work()
+        } catch SpotifyError.rateLimited(let until) {
+            rateLimitedUntil = until
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         busy = nil
     }
 }

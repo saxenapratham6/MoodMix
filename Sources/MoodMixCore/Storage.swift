@@ -52,3 +52,38 @@ public actor ProfileStore {
         }
     }
 }
+
+/// Playlists, their songs and favorite scores, saved so launching MoodMix doesn't re-download
+/// a whole library (Spotify's Dev Mode quota is small). A playlist's songs are re-fetched only
+/// when its snapshot ID changes.
+public struct LibrarySnapshot: Codable, Sendable {
+    public struct CachedPlaylist: Codable, Sendable {
+        public var snapshotID: String?
+        public var tracks: [Track]
+    }
+
+    public var playlists: [Playlist] = []
+    public var tracks: [String: CachedPlaylist] = [:]
+    public var favorites: FavoriteSignals?
+    public var favoritesFetchedAt: Date?
+}
+
+public actor LibraryCache {
+    private let url: URL
+
+    public init(directory: URL? = nil) {
+        let dir = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MoodMix", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        url = dir.appendingPathComponent("library.json")
+    }
+
+    public func load() -> LibrarySnapshot {
+        guard let data = try? Data(contentsOf: url) else { return LibrarySnapshot() }
+        return (try? JSONDecoder().decode(LibrarySnapshot.self, from: data)) ?? LibrarySnapshot()
+    }
+
+    public func save(_ snapshot: LibrarySnapshot) {
+        if let data = try? JSONEncoder().encode(snapshot) { try? data.write(to: url, options: .atomic) }
+    }
+}
