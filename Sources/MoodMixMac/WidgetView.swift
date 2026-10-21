@@ -21,6 +21,10 @@ struct WidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
+        .onReceive(NotificationCenter.default.publisher(for: .moodMixToggleWidget)) { _ in toggle() }
+        .onReceive(NotificationCenter.default.publisher(for: .moodMixTogglePlaylists)) { _ in
+            withAnimation(.spring(duration: 0.3)) { showingPlaylists.toggle() }
+        }
     }
 
     private func toggle() {
@@ -35,6 +39,11 @@ struct WidgetView: View {
             withAnimation(.spring(duration: 0.4, bounce: 0.25).delay(0.05)) { expanded = true }
         }
     }
+}
+
+extension Notification.Name {
+    static let moodMixToggleWidget = Notification.Name("MoodMixToggleWidget")
+    static let moodMixTogglePlaylists = Notification.Name("MoodMixTogglePlaylists")
 }
 
 /// Dark glass background shared by the bar and the card.

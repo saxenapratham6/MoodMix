@@ -29,9 +29,17 @@ final class WidgetController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
 
+        // The window's size is set only by `place`. The SwiftUI view just fills a plain container with an
+        // autoresizing mask, so SwiftUI and the window never negotiate size through Auto Layout. That
+        // negotiation is what looped forever and crashed while the content changed during a resize.
         let host = NSHostingView(rootView: WidgetView(controller: self).environment(model))
         host.sizingOptions = []
-        panel.contentView = host
+        host.translatesAutoresizingMaskIntoConstraints = true
+        host.autoresizingMask = [.width, .height]
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.collapsedSize))
+        host.frame = container.bounds
+        container.addSubview(host)
+        panel.contentView = container
         place(size: Self.collapsedSize, animate: false)
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.place(size: self?.panel.frame.size ?? Self.collapsedSize, animate: false) }
@@ -53,14 +61,8 @@ final class WidgetController {
         guard let screen = panel.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let frame = NSRect(x: visible.midX - size.width / 2, y: visible.minY + 4, width: size.width, height: size.height)
-        if animate {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.28
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                panel.animator().setFrame(frame, display: true)
-            }
-        } else {
-            panel.setFrame(frame, display: true)
-        }
+        // SwiftUI animates the card itself, so the window can snap to its new size.
+        guard panel.frame != frame else { return }
+        panel.setFrame(frame, display: true, animate: false)
     }
 }

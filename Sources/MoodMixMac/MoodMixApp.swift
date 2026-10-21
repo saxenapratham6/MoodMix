@@ -22,6 +22,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             widget.show()
             self.widget = widget
             Task { await SpotifyLauncher.ensureRunning() }
+            if ProcessInfo.processInfo.environment["MOODMIX_STRESS_RESIZE"] != nil {
+                // Development check: flip the widget open and closed to catch layout crashes.
+                Task {
+                    try? await Task.sleep(for: .seconds(6))  // let the playlist load
+                    for i in 0..<40 {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        if i % 4 == 0 { NotificationCenter.default.post(name: .moodMixToggleWidget, object: nil) }
+                        if i % 3 == 0 { NotificationCenter.default.post(name: .moodMixTogglePlaylists, object: nil) }
+                        Shared.model.mood = Mood.allCases[i % Mood.allCases.count]
+                        Shared.model.buildMix()
+                    }
+                    print("stress done")
+                }
+            }
         }
     }
 }
