@@ -289,7 +289,7 @@ private struct Bubble: View {
         let d = WidgetController.bubbleDiameter
         let np = model.nowPlaying
         ZStack {
-            VinylRecord(artworkURL: np?.track.artworkURL, spinning: np?.isPlaying == true, size: d - 10)
+            VinylRecord(artworkURL: np?.track.artworkURL, spinning: np?.isPlaying == true, size: d - 8)
             if let np {
                 // Song progress around the record.
                 TimelineView(.periodic(from: .now, by: 1)) { context in

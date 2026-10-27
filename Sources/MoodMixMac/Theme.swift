@@ -156,24 +156,27 @@ struct VinylRecord: View {
         ZStack {
             Circle().fill(RadialGradient(colors: [Color(white: 0.18), Color(white: 0.05), Color(white: 0.02)],
                                          center: .center, startRadius: 0, endRadius: size / 2))
-            // Grooves between the label and the rim.
-            ForEach(0..<7, id: \.self) { i in
+            // Grooves in the ring between the label and the rim.
+            ForEach(0..<5, id: \.self) { i in
                 Circle()
-                    .stroke(.white.opacity(i.isMultiple(of: 2) ? 0.08 : 0.04), lineWidth: 0.6)
-                    .padding(size * 0.05 + CGFloat(i) * size * 0.035)
+                    .stroke(.white.opacity(i.isMultiple(of: 2) ? 0.09 : 0.045), lineWidth: 0.6)
+                    .padding(size * 0.04 + CGFloat(i) * size * 0.03)
             }
             label
-                .frame(width: size * 0.44, height: size * 0.44)
+                .frame(width: size * Self.labelRatio, height: size * Self.labelRatio)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(.black.opacity(0.5), lineWidth: 0.8))
-            Circle().fill(Color(white: 0.06)).frame(width: size * 0.06, height: size * 0.06)  // spindle hole
+            Circle().fill(Color(white: 0.06)).frame(width: size * 0.05, height: size * 0.05)  // spindle hole
             Circle().stroke(.white.opacity(0.12), lineWidth: 0.8)  // rim
         }
     }
 
+    /// How much of the record the album cover covers: big enough to clearly see the song.
+    static let labelRatio: CGFloat = 0.62
+
     @ViewBuilder private var label: some View {
         if let artworkURL {
-            Artwork(url: artworkURL, size: size * 0.44, radius: size * 0.22)
+            Artwork(url: artworkURL, size: size * Self.labelRatio, radius: size * Self.labelRatio / 2)
         } else {
             ZStack {
                 Theme.green

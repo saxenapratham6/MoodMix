@@ -17,7 +17,7 @@ final class WidgetController {
     /// Room around the glass for its shadow.
     static let pad: CGFloat = 18
     static let barSize = NSSize(width: 580, height: 64)
-    static let bubbleDiameter: CGFloat = 72
+    static let bubbleDiameter: CGFloat = 88
     static let gap: CGFloat = 10
     static let pillWidth: CGFloat = 168
     static let pillGap: CGFloat = 8
