@@ -1,0 +1,51 @@
+name: MoodMixiOS
+options:
+  bundleIdPrefix: com.saxenapratham
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  MoodMixCore:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  MoodMixiOS:
+    type: application
+    platform: iOS
+    sources: [MoodMixiOS]
+    dependencies:
+      - package: MoodMixCore
+        product: MoodMixCore
+      - target: MoodMixWidgets
+    info:
+      path: MoodMixiOS/Info.plist
+      properties:
+        CFBundleDisplayName: MoodMix
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        LSApplicationQueriesSchemes: [spotify]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.saxenapratham.moodmix
+            CFBundleURLSchemes: [moodmix]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.saxenapratham.moodmix
+  MoodMixWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [MoodMixWidgets]
+    info:
+      path: MoodMixWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: MoodMix
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.saxenapratham.moodmix.widgets

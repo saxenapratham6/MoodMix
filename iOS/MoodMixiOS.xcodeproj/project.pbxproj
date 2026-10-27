@@ -1,0 +1,456 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		11FF2222756B6F0BDD639A62 /* MoodMixWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1767F9B49B0BDB3F40086E6F /* WebAuthProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3EE2DB6E9D2FC5E82844FA /* WebAuthProvider.swift */; };
+		227A454A793894B7B9ABD7D3 /* MoodWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */; };
+		313294B9322076C40A60209A /* MoodMixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67047641FC45FD7B1064BB88 /* MoodMixApp.swift */; };
+		4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12751E6F4C38401B99B672 /* Theme.swift */; };
+		A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14407271B6C18B64563B6B3A /* ContentView.swift */; };
+		B26E1A1C779F42B87ED795D2 /* MoodMixCore in Frameworks */ = {isa = PBXBuildFile; productRef = 744056EDE9295016774B079C /* MoodMixCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		824637359842624FC37490CD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 54EDBA76217A7D5211B22256 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0D1DB153233FBDFEB5F540BE;
+			remoteInfo = MoodMixWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CC72634D9DA05453DB9C7470 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				11FF2222756B6F0BDD639A62 /* MoodMixWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0E3EE2DB6E9D2FC5E82844FA /* WebAuthProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthProvider.swift; sourceTree = "<group>"; };
+		14407271B6C18B64563B6B3A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		44A6233F9F3845A504C72338 /* MoodMixiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoodMixiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		67047641FC45FD7B1064BB88 /* MoodMixApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodMixApp.swift; sourceTree = "<group>"; };
+		6C12751E6F4C38401B99B672 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		78AA91AE631184EBE7C44AB3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodWidgets.swift; sourceTree = "<group>"; };
+		AE584FC1EFF747697ADB7654 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoodMixWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F2E4846A5401B2895CE54C34 /* MoodMix */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MoodMix; path = ..; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FE2C5599F6E7F6DCB78837CF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B26E1A1C779F42B87ED795D2 /* MoodMixCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1F852B0E87D036D9A0CC31FF /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				F2E4846A5401B2895CE54C34 /* MoodMix */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		56D1F9B93C9D4036C393873C = {
+			isa = PBXGroup;
+			children = (
+				9972BD1E9FDCFA8CBA3F34D2 /* MoodMixiOS */,
+				B41D8FA9C9A23B2FCA97AF08 /* MoodMixWidgets */,
+				1F852B0E87D036D9A0CC31FF /* Packages */,
+				B2215F57CE2F74A2028CD38B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9972BD1E9FDCFA8CBA3F34D2 /* MoodMixiOS */ = {
+			isa = PBXGroup;
+			children = (
+				14407271B6C18B64563B6B3A /* ContentView.swift */,
+				78AA91AE631184EBE7C44AB3 /* Info.plist */,
+				67047641FC45FD7B1064BB88 /* MoodMixApp.swift */,
+				6C12751E6F4C38401B99B672 /* Theme.swift */,
+				0E3EE2DB6E9D2FC5E82844FA /* WebAuthProvider.swift */,
+			);
+			path = MoodMixiOS;
+			sourceTree = "<group>";
+		};
+		B2215F57CE2F74A2028CD38B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				44A6233F9F3845A504C72338 /* MoodMixiOS.app */,
+				DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B41D8FA9C9A23B2FCA97AF08 /* MoodMixWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				AE584FC1EFF747697ADB7654 /* Info.plist */,
+				9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */,
+			);
+			path = MoodMixWidgets;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0D1DB153233FBDFEB5F540BE /* MoodMixWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C1F623CE123684D86518BA59 /* Build configuration list for PBXNativeTarget "MoodMixWidgets" */;
+			buildPhases = (
+				E00BE3EE6363B4B43F7DA48A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MoodMixWidgets;
+			packageProductDependencies = (
+			);
+			productName = MoodMixWidgets;
+			productReference = DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		D03063C4578688FFA22263F5 /* MoodMixiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FEA13C73D2A833D56778FBDA /* Build configuration list for PBXNativeTarget "MoodMixiOS" */;
+			buildPhases = (
+				10D275A5203F1769980F4F05 /* Sources */,
+				FE2C5599F6E7F6DCB78837CF /* Frameworks */,
+				CC72634D9DA05453DB9C7470 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D92F486A8D458E0941EE364E /* PBXTargetDependency */,
+			);
+			name = MoodMixiOS;
+			packageProductDependencies = (
+				744056EDE9295016774B079C /* MoodMixCore */,
+			);
+			productName = MoodMixiOS;
+			productReference = 44A6233F9F3845A504C72338 /* MoodMixiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		54EDBA76217A7D5211B22256 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 27BD237048B2D1F2677DFBD8 /* Build configuration list for PBXProject "MoodMixiOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 56D1F9B93C9D4036C393873C;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FBDEE624B87648436AADAEC7 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B2215F57CE2F74A2028CD38B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D03063C4578688FFA22263F5 /* MoodMixiOS */,
+				0D1DB153233FBDFEB5F540BE /* MoodMixWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10D275A5203F1769980F4F05 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */,
+				313294B9322076C40A60209A /* MoodMixApp.swift in Sources */,
+				4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */,
+				1767F9B49B0BDB3F40086E6F /* WebAuthProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E00BE3EE6363B4B43F7DA48A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				227A454A793894B7B9ABD7D3 /* MoodWidgets.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D92F486A8D458E0941EE364E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0D1DB153233FBDFEB5F540BE /* MoodMixWidgets */;
+			targetProxy = 824637359842624FC37490CD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		358395644E74B48F5AAD9422 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = MoodMixWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.saxenapratham.moodmix.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		771803424DC2BF820A3CADD4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = MoodMixiOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.saxenapratham.moodmix;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		917825EC531A32AF109AA1A9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B929453C78954CCBE762E6F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = MoodMixWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.saxenapratham.moodmix.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C7EC556598EE16A7C161BE6F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		EDB400DC44E14CF845A3A2C4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = MoodMixiOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.saxenapratham.moodmix;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		27BD237048B2D1F2677DFBD8 /* Build configuration list for PBXProject "MoodMixiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				917825EC531A32AF109AA1A9 /* Debug */,
+				C7EC556598EE16A7C161BE6F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C1F623CE123684D86518BA59 /* Build configuration list for PBXNativeTarget "MoodMixWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				358395644E74B48F5AAD9422 /* Debug */,
+				B929453C78954CCBE762E6F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FEA13C73D2A833D56778FBDA /* Build configuration list for PBXNativeTarget "MoodMixiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				771803424DC2BF820A3CADD4 /* Debug */,
+				EDB400DC44E14CF845A3A2C4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		FBDEE624B87648436AADAEC7 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		744056EDE9295016774B079C /* MoodMixCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MoodMixCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 54EDBA76217A7D5211B22256 /* Project object */;
+}

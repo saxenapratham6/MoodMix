@@ -45,6 +45,27 @@ Spotify doesn't let other apps process its audio, so the actual crossfade comes 
 
 Keep the Spotify app open on some device (Mac or phone) so there's somewhere to play.
 
+## Everything else it does
+
+- **Learns from you:** skip a song within 30 s and it fits that mood a little less; listen through and it fits a little more. Right-click any song → *This song is more…* to set its mood yourself.
+- **Auto mood:** picks the mood from the time of day, whether headphones are on, and what you usually choose around now.
+- **Journeys:** a mix that moves through up to 4 moods in order (e.g. Sad → Chill → Happy), easing the energy between sections.
+- **Sleep timer** (🌙): stop after this song, at the end of the mix, or fade out after 15–90 minutes.
+- **Save as playlist:** save the queue to your Spotify library.
+- **Insights:** songs per mood, moods that are thin, your most-played songs, and a duplicate cleaner.
+- **Export:** CSV for TuneMyMusic / Soundiiz (to move to Apple Music or YouTube Music) and JSON with each song's moods, BPM and key.
+- **Shortcuts (any app):** ⌃⌥G generate · ⌃⌥Space play/pause · ⌃⌥← → previous/next · ⌃⌥O card · ⌃⌥M widget · ⌃⌥B bubble · ⌃⌥1–8 mood mixes.
+
+## iPhone app
+
+`iOS/` holds the iPhone app (Now / Queue / Insights tabs, Liquid Glass on iOS 26) and its widgets: a Home Screen mood grid and Lock Screen buttons that start a mix.
+
+1. In your Spotify app's dashboard, also add the Redirect URI `moodmix://callback`.
+2. Open `iOS/MoodMixiOS.xcodeproj` in Xcode (regenerate it with `cd iOS && xcodegen generate` after changing `project.yml`).
+3. Select the **MoodMixiOS** target → *Signing & Capabilities* → choose your Team (a free Apple ID works), do the same for **MoodMixWidgets**, then run on your iPhone.
+
+There's no Dynamic Island / Live Activity: keeping it up to date while Spotify plays in the background would need a push server.
+
 ## Notes
 
 - Songs added to a playlist more than once are counted once (the card notes how many duplicates were skipped).
@@ -54,6 +75,5 @@ Keep the Spotify app open on some device (Mac or phone) so there's somewhere to 
 
 ## Roadmap
 
-- [ ] iOS app (SwiftUI + `ASWebAuthenticationSession`, sharing `MoodMixCore`)
-- [ ] Auto-detect mood from time of day and recent listening
-- [ ] Playlist export/transfer
+- [ ] Live Activity on the iPhone (needs a small push server)
+- [ ] Direct Apple Music import (needs an Apple Developer token)

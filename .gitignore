@@ -2,3 +2,5 @@
 .swiftpm/
 .DS_Store
 *.xcodeproj/xcuserdata/
+iOS/build/
+xcuserdata/
