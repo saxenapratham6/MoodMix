@@ -203,9 +203,15 @@ public struct SpotifyAPI: Sendable {
         try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: try JSONSerialization.data(withJSONObject: body))
     }
 
+    /// Moves playback to a device without starting it. Wakes a device that lists itself but ignores commands.
+    public func transfer(to deviceID: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["device_ids": [deviceID], "play": false])
+        try await send("PUT", endpoint("me/player"), body: body)
+    }
+
     /// The active device, else this computer, else any device. A freshly launched Spotify
     /// takes a few seconds to register, so keep asking for a while.
-    private func playbackDeviceID() async throws -> String {
+    public func playbackDeviceID() async throws -> String {
         for attempt in 0..<10 {
             let devices = try await devices()
             if let device = devices.first(where: \.is_active) ?? devices.first(where: { $0.type == "Computer" }) ?? devices.first,

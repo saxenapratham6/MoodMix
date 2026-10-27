@@ -15,6 +15,7 @@ public enum SpotifyError: LocalizedError {
     case noActiveDevice
     case http(Int, String)
     case restricted
+    case notResponding
     case rateLimited(until: Date)
 
     public var errorDescription: String? {
@@ -24,6 +25,7 @@ public enum SpotifyError: LocalizedError {
         case .authFailed(let why): "Spotify login failed: \(why)"
         case .noActiveDevice: "Open Spotify on any device (this Mac, your phone…) so MoodMix has something to play on."
         case .http(let code, let message): "Spotify said no (\(code)): \(message.prefix(160))"
+        case .notResponding: "Spotify on this device isn't responding to MoodMix. Quit Spotify (⌘Q), open it again, and press play once in Spotify."
         case .restricted: "Spotify didn't allow that right now. It may be an ad, a device that limits control, or nothing left to skip to."
         case .rateLimited(let until):
             "Spotify asked MoodMix to slow down. It'll pick up again automatically at \(until.formatted(date: .omitted, time: .shortened))."

@@ -10,7 +10,14 @@ let package = Package(
     ],
     targets: [
         .target(name: "MoodMixCore"),
-        .executableTarget(name: "MoodMixMac", dependencies: ["MoodMixCore"]),
+        .executableTarget(
+            name: "MoodMixMac",
+            dependencies: ["MoodMixCore"],
+            exclude: ["Info.plist"],
+            // Embed an Info.plist so macOS can show "MoodMix wants to control Spotify".
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
+                                           "-Xlinker", "Sources/MoodMixMac/Info.plist"])]
+        ),
         .testTarget(name: "MoodMixCoreTests", dependencies: ["MoodMixCore"]),
     ]
 )

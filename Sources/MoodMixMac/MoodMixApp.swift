@@ -7,6 +7,7 @@ enum Shared {
     static let model: AppModel = {
         let model = AppModel()
         model.beforePlayback = { await SpotifyLauncher.ensureRunning() }
+        model.playLocally = { await SpotifyLauncher.playDirectly($0) }
         model.momentProvider = { MomentContext(headphones: AudioRoute.headphonesConnected) }
         return model
     }()
