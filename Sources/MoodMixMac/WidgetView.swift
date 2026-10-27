@@ -47,7 +47,13 @@ struct WidgetView: View {
 
     private var rootAlignment: Alignment {
         switch controller.mode {
-        case .bubble: controller.bubbleSide == .right ? .trailing : .leading
+        case .bubble:
+            switch (controller.bubbleSide, controller.pillAbove) {
+            case (.right, false): .topTrailing
+            case (.right, true): .bottomTrailing
+            case (.left, false): .topLeading
+            case (.left, true): .bottomLeading
+            }
         default: controller.cardBelow ? .top : .bottom
         }
     }
@@ -79,20 +85,19 @@ struct WidgetView: View {
 
     private func bubbleWithPill(_ accent: Color) -> some View {
         let right = controller.bubbleSide == .right
-        return HStack(spacing: WidgetController.pillGap) {
-            if right { pill(right: right) }
-            Bubble(accent: accent)
-            if !right { pill(right: right) }
+        return VStack(alignment: right ? .trailing : .leading, spacing: WidgetController.pillGap) {
+            if controller.pillAbove { pill }
+            // The record never moves or resizes when the pill comes and goes.
+            Bubble(accent: accent).transaction { $0.animation = nil }
+            if !controller.pillAbove { pill }
         }
         .background { HoverTracker { controller.setBubbleHover($0) } }
     }
 
-    @ViewBuilder private func pill(right: Bool) -> some View {
+    @ViewBuilder private var pill: some View {
         if controller.pillVisible {
             BubblePill()
-                .transition(.move(edge: right ? .trailing : .leading)
-                    .combined(with: .scale(scale: 0.5, anchor: right ? .trailing : .leading))
-                    .combined(with: .opacity))
+                .transition(.move(edge: controller.pillAbove ? .bottom : .top).combined(with: .opacity))
         }
     }
 }
@@ -125,9 +130,14 @@ private struct MiniBar: View {
                 }
                 .buttonStyle(.pressable)
             }
-            GenerateButton(compact: true)
-            CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble (or drag the bar to a screen edge)") {
-                controller.shrinkToBubble()
+            // The open card has its own Generate and bubble buttons, so the bar doesn't repeat them.
+            if !controller.showCard {
+                GenerateButton(compact: true)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble (or drag the bar to a screen edge)") {
+                    controller.shrinkToBubble()
+                }
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             CircleIconButton(symbol: controller.cardBelow ? "chevron.down" : "chevron.up",
                              help: controller.showCard ? "Collapse" : "Moods, playlists and more",
@@ -135,9 +145,10 @@ private struct MiniBar: View {
                 controller.toggleExpanded()
             }
         }
-        .padding(.leading, 10)
+        .padding(.leading, 16)
         .padding(.trailing, 12)
         .frame(width: WidgetController.barSize.width, height: WidgetController.barSize.height)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: controller.showCard)
         .background { DragHandle(onDragEnded: controller.dragEnded) }
         .overlay(alignment: .bottom) { ProgressLine().padding(.horizontal, 30).padding(.bottom, 4) }
         .background(alignment: .leading) {
@@ -322,24 +333,11 @@ private struct Bubble: View {
 
 /// Slides out of the bubble on hover so you can control playback without opening the bar.
 private struct BubblePill: View {
-    @Environment(WidgetController.self) private var controller
-
     var body: some View {
-        HStack(spacing: 10) {
-            Transport(size: .regular)
-            Button { controller.restoreFromBubble() } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .frame(width: 28, height: 28)
-                    .liquidGlass(interactive: true, in: Circle())
-            }
-            .buttonStyle(.pressable)
-            .help("Open the bar")
-        }
-        .padding(.horizontal, 12)
-        .frame(width: WidgetController.pillWidth, height: 52)
-        .liquidGlass(tint: Color.black.opacity(0.35), in: Capsule())
-        .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+        Transport(size: .regular)
+            .frame(width: WidgetController.pillWidth, height: WidgetController.pillHeight)
+            .liquidGlass(tint: Color.black.opacity(0.35), in: Capsule())
+            .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
     }
 }
 

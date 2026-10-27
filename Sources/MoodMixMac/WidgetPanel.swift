@@ -19,7 +19,8 @@ final class WidgetController {
     static let barSize = NSSize(width: 580, height: 64)
     static let bubbleDiameter: CGFloat = 88
     static let gap: CGFloat = 10
-    static let pillWidth: CGFloat = 168
+    static let pillWidth: CGFloat = 140
+    static let pillHeight: CGFloat = 52
     static let pillGap: CGFloat = 8
 
     private(set) var mode: Mode = .bar
@@ -33,6 +34,8 @@ final class WidgetController {
     /// Hovering the bubble widens the window, then slides out a pill with playback controls.
     private(set) var bubbleWide = false
     private(set) var pillVisible = false
+    /// The playback pill sits under the record, or above it when the record is near the bottom of the screen.
+    private(set) var pillAbove = false
 
     @ObservationIgnored let panel: WidgetPanel
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
@@ -183,9 +186,9 @@ final class WidgetController {
         switch mode {
         case .bubble:
             let d = Self.bubbleDiameter
-            let bubble = bubbleWide && bubbleSide == .right
-                ? NSRect(x: inner.maxX - d, y: inner.midY - d / 2, width: d, height: d)
-                : NSRect(x: inner.minX, y: inner.midY - d / 2, width: d, height: d)
+            let bubble = NSRect(x: bubbleSide == .right ? inner.maxX - d : inner.minX,
+                                y: bubbleWide && !pillAbove ? inner.maxY - d : inner.minY,
+                                width: d, height: d)
             resetBubbleHover()
             let nearLeft = bubble.midX - visible.minX < 140
             let nearRight = visible.maxX - bubble.midX < 140
@@ -253,9 +256,16 @@ final class WidgetController {
             let y = min(max(bubbleCenterY - d / 2, visible.minY + 8), visible.maxY - d - 8)
             var rect = NSRect(x: x, y: y, width: d, height: d)
             if bubbleWide {
-                let extra = Self.pillWidth + Self.pillGap
-                if bubbleSide == .right { rect.origin.x -= extra }
-                rect.size.width += extra
+                // Grow toward the pill without moving the record: down (or up near the bottom of the
+                // screen) and inward from the screen edge.
+                let extraHeight = Self.pillHeight + Self.pillGap
+                pillAbove = rect.minY - extraHeight < visible.minY + 8
+                if !pillAbove { rect.origin.y -= extraHeight }
+                rect.size.height += extraHeight
+                if Self.pillWidth > d {
+                    if bubbleSide == .right { rect.origin.x -= Self.pillWidth - d }
+                    rect.size.width = Self.pillWidth
+                }
             }
             return rect.insetBy(dx: -Self.pad, dy: -Self.pad)
         case .bar:
