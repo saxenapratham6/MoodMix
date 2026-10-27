@@ -64,10 +64,11 @@ struct MenuBarPanel: View {
             Divider().overlay(.white.opacity(0.15))
 
             VStack(spacing: 2) {
-                MenuRow(title: Shared.widget?.isVisible == false ? "Show Widget" : "Hide Widget", symbol: "rectangle.bottomthird.inset.filled") {
+                MenuRow(title: Shared.widget?.isVisible == false ? "Show Widget" : "Hide Widget", symbol: "rectangle.bottomthird.inset.filled",
+                        keys: HotKeys.shared.keys(6)) {
                     Shared.widget?.toggleVisible()
                 }
-                MenuRow(title: "Shrink to Bubble", symbol: "circle.dashed") { Shared.widget?.shrinkToBubble() }
+                MenuRow(title: "Shrink to Bubble", symbol: "circle.dashed", keys: HotKeys.shared.keys(7)) { Shared.widget?.shrinkToBubble() }
                 MenuRow(title: "Reset Widget Position", symbol: "arrow.down.to.line") {
                     Shared.widget?.show()
                     Shared.widget?.resetPosition()
@@ -81,6 +82,7 @@ struct MenuBarPanel: View {
                 }
                 .buttonStyle(.plain)
                 .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
+                ShortcutList()
                 MenuRow(title: "Quit MoodMix", symbol: "power") { NSApp.terminate(nil) }
             }
         }
@@ -138,10 +140,11 @@ struct MenuBarPanel: View {
 private struct MenuRow: View {
     let title: String
     let symbol: String
+    var keys: String? = nil
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) { MenuRowLabel(title: title, symbol: symbol) }
+        Button(action: action) { MenuRowLabel(title: title, symbol: symbol, keys: keys) }
             .buttonStyle(.plain)
     }
 }
@@ -149,6 +152,7 @@ private struct MenuRow: View {
 private struct MenuRowLabel: View {
     let title: String
     let symbol: String
+    var keys: String? = nil
     @State private var hovering = false
 
     var body: some View {
@@ -156,6 +160,7 @@ private struct MenuRowLabel: View {
             Image(systemName: symbol).frame(width: 18).foregroundStyle(.white.opacity(0.75))
             Text(title)
             Spacer()
+            if let keys { Text(keys).font(.callout.monospaced()).foregroundStyle(.white.opacity(0.45)) }
         }
         .font(.callout)
         .padding(.horizontal, 8)
@@ -163,5 +168,38 @@ private struct MenuRowLabel: View {
         .background(hovering ? Color.white.opacity(0.12) : .clear, in: .rect(cornerRadius: 7))
         .contentShape(.rect)
         .onHover { hovering = $0 }
+    }
+}
+
+/// Every global shortcut, folded away under one row.
+private struct ShortcutList: View {
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { open.toggle() }
+            } label: {
+                MenuRowLabel(title: "Keyboard Shortcuts", symbol: open ? "chevron.down" : "keyboard", keys: "⌃⌥")
+            }
+            .buttonStyle(.plain)
+            if open {
+                VStack(spacing: 3) {
+                    ForEach(HotKeys.shared.shortcuts) { shortcut in
+                        HStack {
+                            Text(shortcut.title).foregroundStyle(.white.opacity(0.8))
+                            Spacer()
+                            Text(shortcut.keys).font(.caption.monospaced()).foregroundStyle(.white.opacity(0.5))
+                        }
+                        .font(.caption)
+                    }
+                    Text("They work from any app.").font(.caption2).foregroundStyle(.white.opacity(0.45))
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+                }
+                .padding(.horizontal, 36)
+                .padding(.vertical, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 }

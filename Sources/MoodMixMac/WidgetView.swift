@@ -131,13 +131,13 @@ private struct MiniBar: View {
             if !controller.showCard {
                 GenerateButton(compact: true)
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
-                CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble (or drag the bar to a screen edge)") {
+                CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble, or drag the bar to a screen edge (⌃⌥B)") {
                     controller.shrinkToBubble()
                 }
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             CircleIconButton(symbol: controller.cardBelow ? "chevron.down" : "chevron.up",
-                             help: controller.showCard ? "Collapse" : "Moods, playlists and more",
+                             help: controller.showCard ? "Collapse (⌃⌥O)" : "Moods, playlists and more (⌃⌥O)",
                              rotation: controller.showCard ? 180 : 0) {
                 controller.toggleExpanded()
             }
@@ -262,7 +262,7 @@ struct GenerateButton: View {
         }
         .buttonStyle(.pressable)
         .disabled(!model.isLoggedIn || model.tracks.isEmpty || model.busy != nil)
-        .help("Play a fresh \(model.mood.title.lowercased()) mix from \(model.selectedPlaylist?.name ?? "your playlist")")
+        .help("Play a fresh \(model.mood.title.lowercased()) mix from \(model.selectedPlaylist?.name ?? "your playlist") (⌃⌥G)")
     }
 }
 

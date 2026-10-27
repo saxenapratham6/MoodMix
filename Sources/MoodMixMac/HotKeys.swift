@@ -16,6 +16,9 @@ final class HotKeys {
     }
 
     private(set) var shortcuts: [Shortcut] = []
+
+    /// The key combination for a shortcut ID, for showing next to buttons and menu items.
+    func keys(_ id: UInt32) -> String? { shortcuts.first { $0.id == id }?.keys }
     private var refs: [EventHotKeyRef] = []
     private var handlerInstalled = false
 
@@ -47,7 +50,11 @@ final class HotKeys {
             let id = EventHotKeyID(signature: OSType(0x4D4D_4958), id: shortcut.id)  // "MMIX"
             let status = RegisterEventHotKey(UInt32(shortcut.keyCode), UInt32(controlKey | optionKey), id,
                                              GetApplicationEventTarget(), 0, &ref)
-            if status == noErr, let ref { refs.append(ref) }
+            if status == noErr, let ref {
+                refs.append(ref)
+            } else {
+                ActivityLog.write("shortcut \(shortcut.keys) (\(shortcut.title)) couldn't be registered: \(status); another app may use it")
+            }
         }
     }
 
