@@ -73,6 +73,9 @@ struct MenuBarPanel: View {
                     Shared.widget?.resetPosition()
                 }
                 MenuRow(title: "Open Spotify", symbol: "music.note") { SpotifyLauncher.bringToFront() }
+                MenuRow(title: "Export All Playlists…", symbol: "square.and.arrow.up") {
+                    Task { await Exporter.export(all: true, model: model) }
+                }
                 SettingsLink {
                     MenuRowLabel(title: "Settings…", symbol: "gearshape")
                 }

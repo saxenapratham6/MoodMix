@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let widget = WidgetController(model: Shared.model)
             widget.show()
             Shared.widget = widget
+            HotKeys.shared.register(model: Shared.model, widget: widget)
             Task { await SpotifyLauncher.ensureRunning() }
             if ProcessInfo.processInfo.environment["MOODMIX_STRESS_RESIZE"] != nil { runStressTest(widget) }
         }

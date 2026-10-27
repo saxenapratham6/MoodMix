@@ -9,8 +9,11 @@ public struct Track: Codable, Hashable, Identifiable, Sendable {
     public let durationMs: Int
     public let addedAt: Date?
     public var artworkURL: URL?
+    /// International Standard Recording Code: lets other services find the exact same recording.
+    public var isrc: String?
 
-    public init(id: String, uri: String, name: String, artists: [String], album: String, durationMs: Int, addedAt: Date?, artworkURL: URL? = nil) {
+    public init(id: String, uri: String, name: String, artists: [String], album: String, durationMs: Int, addedAt: Date?,
+                artworkURL: URL? = nil, isrc: String? = nil) {
         self.id = id
         self.uri = uri
         self.name = name
@@ -19,6 +22,7 @@ public struct Track: Codable, Hashable, Identifiable, Sendable {
         self.durationMs = durationMs
         self.addedAt = addedAt
         self.artworkURL = artworkURL
+        self.isrc = isrc
     }
 
     public var artistLine: String { artists.joined(separator: ", ") }

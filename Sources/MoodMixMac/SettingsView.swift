@@ -20,6 +20,15 @@ struct SettingsView: View {
                 Text("Create an app at developer.spotify.com/dashboard, select Web API, and add the Redirect URI **http://127.0.0.1:8888/callback**. Then paste its Client ID here.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Keyboard shortcuts (work in any app)") {
+                ForEach(HotKeys.shared.shortcuts) { shortcut in
+                    HStack {
+                        Text(shortcut.title)
+                        Spacer()
+                        Text(shortcut.keys).font(.body.monospaced()).foregroundStyle(.secondary)
+                    }
+                }
+            }
             Section("Claude (mood labels)") {
                 SecureField("Anthropic API key", text: $model.anthropicKey)
                 TextField("Model", text: $model.claudeModel)

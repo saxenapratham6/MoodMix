@@ -918,7 +918,25 @@ private struct InsightsView: View {
 
             section("Duplicates").padding(.top, 4)
             duplicates
+
+            section("Move to another service").padding(.top, 4)
+            HStack(spacing: 8) {
+                exportButton("Export this playlist", all: false)
+                exportButton("Export all", all: true)
+            }
+            Text("Saves a CSV that TuneMyMusic or Soundiiz can import into Apple Music or YouTube Music, plus a JSON with each song's moods, tempo and key.")
+                .font(.caption).foregroundStyle(.white.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func exportButton(_ title: String, all: Bool) -> some View {
+        Button { Task { await Exporter.export(all: all, model: model) } } label: {
+            Label(title, systemImage: "square.and.arrow.up").font(.caption.weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .liquidGlass(interactive: true, in: Capsule())
+        }
+        .buttonStyle(.pressable)
+        .disabled(model.busy != nil)
     }
 
     @ViewBuilder private var duplicates: some View {

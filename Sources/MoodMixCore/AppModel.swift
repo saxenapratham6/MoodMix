@@ -368,6 +368,23 @@ public final class AppModel {
         await refreshLibrary()
     }
 
+    // MARK: Export
+
+    /// Downloads the selected playlist (or all of them) fresh, with ISRCs, ready to write as CSV/JSON.
+    public func exportPlaylists(all: Bool) async -> [PlaylistExport.Playlist] {
+        let targets = all ? playlists : playlists.filter { $0.id == selectedPlaylistID }
+        var result: [PlaylistExport.Playlist] = []
+        await run("Exporting \(targets.count) playlist\(targets.count == 1 ? "" : "s")…") {
+            for (i, playlist) in targets.enumerated() {
+                self.busy = "Exporting \(playlist.name) (\(i + 1) of \(targets.count))…"
+                let songs = try await self.api.tracks(inPlaylist: playlist.id)
+                result.append(PlaylistExport.playlist(name: playlist.name, id: playlist.id, tracks: songs, profiles: self.profiles))
+            }
+        }
+        ActivityLog.write("exported \(result.count) playlists")
+        return result
+    }
+
     // MARK: Your corrections
 
     /// "This song is more <mood>": puts that mood first for the song and keeps analysis from changing it.

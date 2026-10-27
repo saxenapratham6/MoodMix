@@ -304,6 +304,7 @@ struct SpotifyImage: Decodable {
 struct TrackObject: Decodable {
     struct Name: Decodable { let name: String }
     struct Album: Decodable { let name: String; let images: [SpotifyImage]? }
+    struct ExternalIDs: Decodable { let isrc: String? }
     let id: String?
     let uri: String?
     let name: String?
@@ -312,6 +313,7 @@ struct TrackObject: Decodable {
     let duration_ms: Int?
     let artists: [Name]?
     let album: Album?
+    let external_ids: ExternalIDs?
 
     func asTrack(addedAt: Date? = nil) -> Track? {
         guard type ?? "track" == "track", is_local != true, let id, let uri, let name else { return nil }
@@ -320,7 +322,8 @@ struct TrackObject: Decodable {
                      album: album?.name ?? "",
                      durationMs: duration_ms ?? 210_000,
                      addedAt: addedAt,
-                     artworkURL: SpotifyImage.best(album?.images, near: 300))
+                     artworkURL: SpotifyImage.best(album?.images, near: 300),
+                     isrc: external_ids?.isrc)
     }
 }
 
