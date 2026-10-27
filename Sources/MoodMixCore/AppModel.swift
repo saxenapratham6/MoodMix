@@ -117,7 +117,16 @@ public final class AppModel {
         }
     }
 
-    private var api: SpotifyAPI { SpotifyAPI(auth: auth) }
+    /// "Computer" on the Mac; the iPhone app sets "Smartphone" so mixes play on the phone unless another device is active.
+    @ObservationIgnored public var preferredDeviceType = "Computer"
+
+    private var api: SpotifyAPI { SpotifyAPI(auth: auth, preferredDeviceType: preferredDeviceType) }
+
+    /// Whether Spotify has somewhere to play right now: an active device, or one of the preferred type.
+    public func hasPlaybackDevice() async -> Bool {
+        guard let devices = try? await api.devices() else { return true }  // can't tell; don't get in the way
+        return devices.contains { $0.id != nil && ($0.is_active || $0.type == preferredDeviceType) }
+    }
 
     public var selectedPlaylist: Playlist? { playlists.first { $0.id == selectedPlaylistID } }
 

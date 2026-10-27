@@ -110,3 +110,56 @@ func formatTime(_ ms: Int) -> String {
     let s = max(ms, 0) / 1000
     return String(format: "%d:%02d", s / 60, s % 60)
 }
+
+/// A vinyl record with the album cover as its center label, spinning at 33⅓ rpm while the song plays.
+/// The sheen stays put while the record turns underneath it. Same design as the Mac widget's bubble.
+struct VinylRecord: View {
+    let artworkURL: URL?
+    let spinning: Bool
+    var size: CGFloat
+    static let labelRatio: CGFloat = 0.62
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !spinning)) { context in
+                disc.rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate * 200))  // 33⅓ rpm = 200°/s
+            }
+            Circle()
+                .fill(AngularGradient(colors: [.clear, .white.opacity(0.16), .clear, .clear, .white.opacity(0.10), .clear, .clear],
+                                      center: .center))
+                .blendMode(.screen)
+                .allowsHitTesting(false)
+        }
+        .frame(width: size, height: size)
+        .shadow(color: .black.opacity(0.55), radius: size * 0.08, y: size * 0.04)
+    }
+
+    private var disc: some View {
+        ZStack {
+            Circle().fill(RadialGradient(colors: [Color(white: 0.18), Color(white: 0.05), Color(white: 0.02)],
+                                         center: .center, startRadius: 0, endRadius: size / 2))
+            ForEach(0..<8, id: \.self) { i in
+                Circle()
+                    .stroke(.white.opacity(i.isMultiple(of: 2) ? 0.08 : 0.04), lineWidth: 0.7)
+                    .padding(size * 0.025 + CGFloat(i) * size * 0.019)
+            }
+            label
+                .frame(width: size * Self.labelRatio, height: size * Self.labelRatio)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(.black.opacity(0.5), lineWidth: 1))
+            Circle().fill(Color(white: 0.06)).frame(width: size * 0.04, height: size * 0.04)  // spindle hole
+            Circle().stroke(.white.opacity(0.12), lineWidth: 1)  // rim
+        }
+    }
+
+    @ViewBuilder private var label: some View {
+        if let artworkURL {
+            Artwork(url: artworkURL, size: size * Self.labelRatio, radius: size * Self.labelRatio / 2)
+        } else {
+            ZStack {
+                Theme.green
+                Image(systemName: "waveform").font(.system(size: size * 0.22, weight: .bold)).foregroundStyle(.black)
+            }
+        }
+    }
+}

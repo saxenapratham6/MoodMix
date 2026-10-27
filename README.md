@@ -6,8 +6,8 @@ On macOS it's a Liquid Glass widget (no window, no Dock icon), tinted with the c
 
 - **Bar:** now playing, ⏮ ⏯ ⏭, **Generate**, and a chevron that grows the control card out of the bar: playlists, moods, energy shape, length, favorites weight, **Generate** / **Match** (queue songs that fit what's playing now) / **Analyze**, and Up next.
 - **Move it anywhere:** drag the bar or card. Drag it to the left or right screen edge (or click ◌) and it becomes a **bubble** with the album art and a progress ring; click the bubble to bring the bar back.
-- **Queue:** the card's Queue tab shows now playing and what's next. Drag to reorder, remove songs, double-click to jump, or search the playlist to add any song *next* or *at the end*. A song from another mood plays where you put it, then the queue carries on in its mood, topping itself up when it runs low. Spotify's API can't reorder its own queue, so MoodMix keeps the order and re-sends it to Spotify after an edit, resuming the current song where it was (expect a brief blip).
-- **Bubble controls:** hover the bubble for a glass pill with ⏮ ⏯ ⏭ and a button to reopen the bar.
+- **Queue:** the card's Queue tab shows now playing and what's next. Drag to reorder, remove songs, double-click to jump, or search the playlist to add any song *next* or *at the end*. A song from another mood plays where you put it, then the queue carries on in its mood, topping itself up when it runs low. MoodMix plays the queue from a private **MoodMix Queue** playlist in your library (Spotify's desktop app can drop plain lists of songs); songs added at the end just append to it, while reorders rewrite it and resume the current song where it was (expect a brief blip).
+- **Bubble:** a spinning vinyl record with the album cover as its label and a progress ring; hover it for ⏮ ⏯ ⏭ underneath, click it to reopen the bar.
 - **Menu bar:** a Now Playing–style glass panel with quick moods, Generate, Match, show/hide, bubble, reset position, Settings and Quit.
 - It launches Spotify in the background if it isn't open.
 
@@ -54,11 +54,14 @@ Keep the Spotify app open on some device (Mac or phone) so there's somewhere to 
 - **Save as playlist:** save the queue to your Spotify library.
 - **Insights:** songs per mood, moods that are thin, your most-played songs, and a duplicate cleaner.
 - **Export:** CSV for TuneMyMusic / Soundiiz (to move to Apple Music or YouTube Music) and JSON with each song's moods, BPM and key.
-- **Shortcuts (any app):** ⌃⌥G generate · ⌃⌥Space play/pause · ⌃⌥← → previous/next · ⌃⌥O card · ⌃⌥M widget · ⌃⌥B bubble · ⌃⌥1–8 mood mixes.
+- **Shortcuts (any app, also listed in the menu bar panel):** ⌃⌥G generate · ⌃⌥Space play/pause · ⌃⌥← → previous/next · ⌃⌥O card · ⌃⌥M widget · ⌃⌥B bubble · ⌃⌥1–8 mood mixes.
 
 ## iPhone app
 
 `iOS/` holds the iPhone app (Now / Queue / Insights tabs, Liquid Glass on iOS 26) and its widgets: a Home Screen mood grid and Lock Screen buttons that start a mix.
+
+- **Now** shows the song as a spinning vinyl record with the cover as its label (same as the Mac bubble); the app icon is a vinyl too (`scripts/make-icon.swift` draws it).
+- If Spotify isn't running on the phone, Generate opens Spotify for a moment; tap **◀ MoodMix** in the top-left corner to come back and the mix starts. Mixes play on the phone unless another device is already playing.
 
 1. In your Spotify app's dashboard, also add the Redirect URI `moodmix://callback`.
 2. Open `iOS/MoodMixiOS.xcodeproj` in Xcode (regenerate it with `cd iOS && xcodegen generate` after changing `project.yml`).

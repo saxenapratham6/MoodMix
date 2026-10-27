@@ -7,6 +7,8 @@ struct MoodMixApp: App {
     @State private var model: AppModel = {
         let model = AppModel()
         model.momentProvider = { MomentContext(headphones: Self.headphonesConnected) }
+        model.preferredDeviceType = "Smartphone"
+        model.beforePlayback = { [unowned model] in await SpotifyHandoff.shared.ensureDevice(for: model) }
         return model
     }()
 

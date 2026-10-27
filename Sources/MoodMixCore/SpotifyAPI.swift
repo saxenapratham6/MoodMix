@@ -4,8 +4,13 @@ import Foundation
 public struct SpotifyAPI: Sendable {
     let auth: SpotifyAuth
     let base = URL(string: "https://api.spotify.com/v1/")!
+    /// Which kind of device to play on when none is active: this Mac ("Computer") or this phone ("Smartphone").
+    let preferredDeviceType: String
 
-    public init(auth: SpotifyAuth) { self.auth = auth }
+    public init(auth: SpotifyAuth, preferredDeviceType: String = "Computer") {
+        self.auth = auth
+        self.preferredDeviceType = preferredDeviceType
+    }
 
     // MARK: Library
 
@@ -246,12 +251,12 @@ public struct SpotifyAPI: Sendable {
         try await send("PUT", endpoint("me/player"), body: body)
     }
 
-    /// The active device, else this computer, else any device. A freshly launched Spotify
+    /// The active device, else one of the preferred type (this Mac or this phone), else any device. A freshly launched Spotify
     /// takes a few seconds to register, so keep asking for a while.
     public func playbackDeviceID() async throws -> String {
         for attempt in 0..<10 {
             let devices = try await devices()
-            if let device = devices.first(where: \.is_active) ?? devices.first(where: { $0.type == "Computer" }) ?? devices.first,
+            if let device = devices.first(where: \.is_active) ?? devices.first(where: { $0.type == preferredDeviceType }) ?? devices.first,
                let id = device.id {
                 return id
             }

@@ -12,6 +12,8 @@
 		227A454A793894B7B9ABD7D3 /* MoodWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */; };
 		313294B9322076C40A60209A /* MoodMixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67047641FC45FD7B1064BB88 /* MoodMixApp.swift */; };
 		4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12751E6F4C38401B99B672 /* Theme.swift */; };
+		5BAA4238F65A078569BF1028 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */; };
+		68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */; };
 		A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14407271B6C18B64563B6B3A /* ContentView.swift */; };
 		B26E1A1C779F42B87ED795D2 /* MoodMixCore in Frameworks */ = {isa = PBXBuildFile; productRef = 744056EDE9295016774B079C /* MoodMixCore */; };
 /* End PBXBuildFile section */
@@ -44,9 +46,11 @@
 		0E3EE2DB6E9D2FC5E82844FA /* WebAuthProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthProvider.swift; sourceTree = "<group>"; };
 		14407271B6C18B64563B6B3A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		44A6233F9F3845A504C72338 /* MoodMixiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoodMixiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyHandoff.swift; sourceTree = "<group>"; };
 		67047641FC45FD7B1064BB88 /* MoodMixApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodMixApp.swift; sourceTree = "<group>"; };
 		6C12751E6F4C38401B99B672 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		78AA91AE631184EBE7C44AB3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodWidgets.swift; sourceTree = "<group>"; };
 		AE584FC1EFF747697ADB7654 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoodMixWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -86,9 +90,11 @@
 		9972BD1E9FDCFA8CBA3F34D2 /* MoodMixiOS */ = {
 			isa = PBXGroup;
 			children = (
+				7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */,
 				14407271B6C18B64563B6B3A /* ContentView.swift */,
 				78AA91AE631184EBE7C44AB3 /* Info.plist */,
 				67047641FC45FD7B1064BB88 /* MoodMixApp.swift */,
+				4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */,
 				6C12751E6F4C38401B99B672 /* Theme.swift */,
 				0E3EE2DB6E9D2FC5E82844FA /* WebAuthProvider.swift */,
 			);
@@ -138,6 +144,7 @@
 			buildConfigurationList = FEA13C73D2A833D56778FBDA /* Build configuration list for PBXNativeTarget "MoodMixiOS" */;
 			buildPhases = (
 				10D275A5203F1769980F4F05 /* Sources */,
+				D5F61E455AD9124AFAEE74AE /* Resources */,
 				FE2C5599F6E7F6DCB78837CF /* Frameworks */,
 				CC72634D9DA05453DB9C7470 /* Embed Foundation Extensions */,
 			);
@@ -188,6 +195,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		D5F61E455AD9124AFAEE74AE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5BAA4238F65A078569BF1028 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		10D275A5203F1769980F4F05 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -195,6 +213,7 @@
 			files = (
 				A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */,
 				313294B9322076C40A60209A /* MoodMixApp.swift in Sources */,
+				68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */,
 				4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */,
 				1767F9B49B0BDB3F40086E6F /* WebAuthProvider.swift in Sources */,
 			);

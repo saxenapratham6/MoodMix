@@ -20,6 +20,18 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
+        .overlay(alignment: .top) {
+            if SpotifyHandoff.shared.waiting {
+                Label("Opening Spotify… come back with ◀ MoodMix (top left) and your mix starts.", systemImage: "arrow.uturn.backward.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .liquidGlass(tint: Theme.green.opacity(0.3), in: Capsule())
+                    .padding(.horizontal, 16)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: SpotifyHandoff.shared.waiting)
         .alert("Something went wrong", isPresented: .constant(model.errorMessage != nil)) {
             Button("OK") { model.dismissError() }
             if model.errorMessage?.contains("Open Spotify") == true {
@@ -87,9 +99,9 @@ private struct NowView: View {
     @ViewBuilder private var nowPlaying: some View {
         VStack(spacing: 16) {
             if let np = model.nowPlaying {
-                Artwork(url: np.track.artworkURL, size: 280, radius: 14)
-                    .shadow(color: .black.opacity(0.5), radius: 24, y: 12)
+                VinylRecord(artworkURL: np.track.artworkURL, spinning: np.isPlaying, size: 300)
                     .padding(.top, 8)
+                    .animation(.easeInOut(duration: 0.4), value: np.track.id)
                 VStack(spacing: 4) {
                     Text(np.track.name).font(.title2.weight(.bold)).lineLimit(1)
                     Text(np.track.artistLine).font(.callout).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
@@ -115,7 +127,8 @@ private struct NowView: View {
                 transport
             } else {
                 VStack(spacing: 10) {
-                    Image(systemName: "waveform.circle.fill").font(.system(size: 72)).foregroundStyle(Theme.green)
+                    VinylRecord(artworkURL: nil, spinning: false, size: 220)
+                        .padding(.bottom, 8)
                     Text("Nothing playing").font(.title3.bold())
                     Text("Pick a mood and press Generate. Keep Spotify open on this phone or another device.")
                         .font(.callout).foregroundStyle(.white.opacity(0.7)).multilineTextAlignment(.center)
@@ -478,7 +491,8 @@ private struct LoginView: View {
     var body: some View {
         VStack(spacing: 18) {
             Spacer()
-            Image(systemName: "waveform.circle.fill").font(.system(size: 88)).foregroundStyle(Theme.green)
+            VinylRecord(artworkURL: nil, spinning: true, size: 190)
+                .padding(.bottom, 6)
             Text("MoodMix").font(.system(size: 44, weight: .black))
             Text("Mood-based, smoothly ordered mixes from your own Spotify playlists.")
                 .multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.7))
