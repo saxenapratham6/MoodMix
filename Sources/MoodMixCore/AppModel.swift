@@ -391,9 +391,13 @@ public final class AppModel {
         }
     }
 
+    /// Asks Spotify for its live state first, since the 5-second poll can be stale
+    /// (pausing an already-paused player is refused).
     public func togglePlayPause() async {
-        guard let np = nowPlaying else { return }
-        await control { np.isPlaying ? try await $0.pause() : try await $0.resume() }
+        await control { api in
+            let playing = (try? await api.currentPlayback())?.isPlaying ?? self.nowPlaying?.isPlaying ?? false
+            playing ? try await api.pause() : try await api.resume()
+        }
     }
 
     public func skipNext() async { await control { try await $0.next() } }
@@ -437,7 +441,15 @@ public final class AppModel {
     }
 
     private func control(_ action: @escaping (SpotifyAPI) async throws -> Void) async {
-        do { try await action(api) } catch { errorMessage = error.localizedDescription }
+        do {
+            try await action(api)
+        } catch SpotifyError.restricted {
+            // Harmless: the button didn't apply to the player's current state. The refresh below shows the truth.
+        } catch SpotifyError.rateLimited(let until) {
+            rateLimitedUntil = until
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         try? await Task.sleep(for: .milliseconds(300))
         await refreshPlayback()
     }

@@ -118,7 +118,8 @@ public struct SpotifyAPI: Sendable {
     /// after an edit without restarting the current song.
     public func play(uris: [String], positionMs: Int = 0) async throws {
         let deviceID = try await playbackDeviceID()
-        try await send("PUT", endpoint("me/player/shuffle", ["state": "false", "device_id": deviceID]))
+        // Best effort: Spotify refuses this while Smart Shuffle is on, and that mustn't stop playback.
+        _ = try? await send("PUT", endpoint("me/player/shuffle", ["state": "false", "device_id": deviceID]))
         var body: [String: Any] = ["uris": Array(uris.prefix(100))]
         if positionMs > 0 { body["position_ms"] = positionMs }
         try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: try JSONSerialization.data(withJSONObject: body))
@@ -183,7 +184,14 @@ public struct SpotifyAPI: Sendable {
         case 404 where url.path.contains("/me/player"):
             throw SpotifyError.noActiveDevice
         default:
-            throw SpotifyError.http(http.statusCode, String(decoding: data, as: UTF8.self))
+            struct Body: Decodable { struct E: Decodable { let message: String? }; let error: E? }
+            let message = (try? JSONDecoder().decode(Body.self, from: data))?.error?.message
+                ?? String(decoding: data, as: UTF8.self)
+            // "Restriction violated": the command doesn't apply right now (pause while paused, nothing to skip to…).
+            if http.statusCode == 403, message.localizedCaseInsensitiveContains("restriction") {
+                throw SpotifyError.restricted
+            }
+            throw SpotifyError.http(http.statusCode, message)
         }
     }
 }
