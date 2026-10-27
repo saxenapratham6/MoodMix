@@ -203,6 +203,43 @@ public struct SpotifyAPI: Sendable {
         try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: try JSONSerialization.data(withJSONObject: body))
     }
 
+    /// Plays a playlist starting at one of its songs. Spotify's desktop app handles this reliably,
+    /// unlike a bare list of songs (which it can accept and then silently drop).
+    public func play(contextURI: String, offsetURI: String, positionMs: Int = 0) async throws {
+        let deviceID = try await playbackDeviceID()
+        _ = try? await send("PUT", endpoint("me/player/shuffle", ["state": "false", "device_id": deviceID]))
+        var body: [String: Any] = ["context_uri": contextURI, "offset": ["uri": offsetURI]]
+        if positionMs > 0 { body["position_ms"] = positionMs }
+        try await send("PUT", endpoint("me/player/play", ["device_id": deviceID]), body: try JSONSerialization.data(withJSONObject: body))
+    }
+
+    public func seek(to positionMs: Int) async throws {
+        try await send("PUT", endpoint("me/player/seek", ["position_ms": "\(max(positionMs, 0))"]))
+    }
+
+    /// Creates the private playlist MoodMix plays its queue from. Returns its ID.
+    public func createQueuePlaylist() async throws -> String {
+        struct Created: Decodable { let id: String }
+        let body = try JSONSerialization.data(withJSONObject: [
+            "name": "MoodMix Queue", "public": false,
+            "description": "MoodMix plays your mood queue from here and keeps it up to date. Safe to ignore.",
+        ])
+        return try JSONDecoder().decode(Created.self, from: try await send("POST", endpoint("me/playlists"), body: body)).id
+    }
+
+    /// Replaces a playlist's songs (Spotify takes 100 per request, so the rest are appended).
+    public func replaceItems(inPlaylist id: String, with uris: [String]) async throws {
+        let first = try JSONSerialization.data(withJSONObject: ["uris": Array(uris.prefix(100))])
+        try await send("PUT", endpoint("playlists/\(id)/items"), body: first)
+        if uris.count > 100 { try await appendItems(toPlaylist: id, uris: Array(uris.dropFirst(100))) }
+    }
+
+    public func appendItems(toPlaylist id: String, uris: [String]) async throws {
+        for chunk in uris.chunked(into: 100) {
+            try await send("POST", endpoint("playlists/\(id)/items"), body: try JSONSerialization.data(withJSONObject: ["uris": chunk]))
+        }
+    }
+
     /// Moves playback to a device without starting it. Wakes a device that lists itself but ignores commands.
     public func transfer(to deviceID: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["device_ids": [deviceID], "play": false])

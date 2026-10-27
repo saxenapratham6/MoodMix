@@ -59,6 +59,12 @@ public struct PlayQueue: Sendable {
 
     public mutating func markSent() { sentAhead = min(upcoming.count, Self.maxSent) }
 
+    /// Queued songs Spotify doesn't have yet (they go at the end, in order).
+    public var unsent: [QueueItem] { Array(upcoming.dropFirst(sentAhead)) }
+
+    /// After appending `unsent` to what Spotify plays from.
+    public mutating func markAllSent() { sentAhead = upcoming.count }
+
     // MARK: Edits
 
     public mutating func move(fromOffsets source: IndexSet, toOffset destination: Int) {

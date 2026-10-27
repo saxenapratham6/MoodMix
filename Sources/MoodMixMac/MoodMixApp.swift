@@ -5,13 +5,26 @@ import SwiftUI
 @MainActor
 enum Shared {
     static let model: AppModel = {
+        migrateSettings()
         let model = AppModel()
         model.beforePlayback = { await SpotifyLauncher.ensureRunning() }
-        model.playLocally = { await SpotifyLauncher.playDirectly($0) }
+        model.playLocally = { await SpotifyLauncher.playDirectly($0, context: $1) }
         model.momentProvider = { MomentContext(headphones: AudioRoute.headphonesConnected) }
         return model
     }()
     static let palette = ArtworkPalette()
+
+    /// Settings used to live under "MoodMix"; since the app has a bundle ID they live under that.
+    /// Copy over anything missing once, so the Client ID, widget position and mood history carry over.
+    private static func migrateSettings() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "settings.migrated"),
+              let old = defaults.persistentDomain(forName: "MoodMix") else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
+        defaults.set(true, forKey: "settings.migrated")
+    }
     static var widget: WidgetController?
 }
 
@@ -26,6 +39,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             HotKeys.shared.register(model: Shared.model, widget: widget)
             Task { await SpotifyLauncher.ensureRunning() }
             if ProcessInfo.processInfo.environment["MOODMIX_STRESS_RESIZE"] != nil { runStressTest(widget) }
+            if let raw = ProcessInfo.processInfo.environment["MOODMIX_TEST_GENERATE"], let mood = Mood(rawValue: raw) {
+                // Development check: generate a mood mix once the library has loaded.
+                Task {
+                    for _ in 0..<40 where Shared.model.tracks.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                    try? await Task.sleep(for: .seconds(2))
+                    Shared.model.autoMood = false
+                    Shared.model.journeyMode = false
+                    Shared.model.mood = mood
+                    await Shared.model.generate()
+                    ActivityLog.write("test generate finished: queueActive=\(Shared.model.queueActive) error=\(Shared.model.errorMessage ?? "none")")
+                }
+            }
         }
     }
 

@@ -287,28 +287,34 @@ private struct Bubble: View {
 
     var body: some View {
         let d = WidgetController.bubbleDiameter
+        let np = model.nowPlaying
         ZStack {
-            if let np = model.nowPlaying {
-                Artwork(url: np.track.artworkURL, size: d - 14, radius: (d - 14) / 2)
+            VinylRecord(artworkURL: np?.track.artworkURL, spinning: np?.isPlaying == true, size: d - 10)
+            if let np {
+                // Song progress around the record.
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let fraction = CGFloat(np.progress(at: context.date)) / CGFloat(max(np.track.durationMs, 1))
                     Circle()
                         .trim(from: 0, to: min(max(fraction, 0), 1))
-                        .stroke(Theme.green, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .stroke(Theme.green, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .frame(width: d - 6, height: d - 6)
+                        .frame(width: d - 3, height: d - 3)
                 }
                 if !np.isPlaying {
-                    Image(systemName: "pause.fill").font(.system(size: 14, weight: .bold))
-                        .padding(6).background(.black.opacity(0.5), in: .circle)
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: 18)
+                        .background(.black.opacity(0.7), in: .circle)
+                        .offset(x: d * 0.3, y: d * 0.3)
+                        .transition(.scale.combined(with: .opacity))
                 }
-            } else {
-                Image(systemName: "waveform").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.green)
             }
         }
         .frame(width: d, height: d)
-        .liquidGlass(tint: accent.opacity(0.4), in: Circle())
+        .liquidGlass(tint: accent.opacity(0.35), in: Circle())
         .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: np?.isPlaying)
         .overlay { DragHandle(onClick: controller.restoreFromBubble, onDragEnded: controller.dragEnded) }
         .help("Click to open · drag away from the edge to move")
     }

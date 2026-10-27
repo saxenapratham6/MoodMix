@@ -69,9 +69,16 @@ public final class AppModel {
     @ObservationIgnored public var beforePlayback: (@MainActor () async -> Void)?
     /// Last-resort platform hook when Spotify accepts a play command but doesn't play:
     /// tell the local Spotify app to play this track directly (AppleScript on macOS).
-    @ObservationIgnored public var playLocally: (@MainActor (_ uri: String) async -> Bool)?
+    @ObservationIgnored public var playLocally: (@MainActor (_ uri: String, _ contextURI: String?) async -> Bool)?
     /// When MoodMix last sent playback; Spotify can report the old state for a few seconds after.
     @ObservationIgnored private var lastSentAt = Date.distantPast
+    /// The private "MoodMix Queue" playlist the queue plays from (needs playlist permission).
+    @ObservationIgnored private var queuePlaylistID = UserDefaults.standard.string(forKey: "queue.playlistID") {
+        didSet { UserDefaults.standard.set(queuePlaylistID, forKey: "queue.playlistID") }
+    }
+    private var queuePlaylistURI: String? { queuePlaylistID.map { "spotify:playlist:\($0)" } }
+    /// Whether Spotify is currently playing from the queue playlist (edits can then append without interrupting).
+    private var playingFromQueuePlaylist: Bool { queuePlaylistURI != nil && nowPlaying?.contextURI == queuePlaylistURI }
 
     /// MoodMix's own queue. `queueActive` is false when Spotify is playing something else.
     public private(set) var queue = PlayQueue()
@@ -157,7 +164,7 @@ public final class AppModel {
         lastLibraryAttempt = Date()
         let label = playlists.isEmpty ? "Loading playlists…" : nil
         await run(label) {
-            self.playlists = try await self.api.myPlaylists()
+            self.playlists = try await self.api.myPlaylists().filter { $0.id != self.queuePlaylistID }
             self.library.playlists = self.playlists
             await self.libraryCache.save(self.library)
         }
@@ -360,7 +367,7 @@ public final class AppModel {
         await run("Saving playlist…") {
             url = try await self.api.createPlaylist(name: name, description: description, uris: songs.map(\.uri))
             ActivityLog.write("saved playlist \(name) with \(songs.count) songs")
-            self.playlists = try await self.api.myPlaylists()
+            self.playlists = try await self.api.myPlaylists().filter { $0.id != self.queuePlaylistID }
             self.library.playlists = self.playlists
             await self.libraryCache.save(self.library)
         }
@@ -551,7 +558,10 @@ public final class AppModel {
             return
         }
         queue.addToEnd(track)
-        scheduleResend()
+        Task {
+            if await appendUnsent() { return }
+            scheduleResend()
+        }
     }
 
     public func jumpInQueue(to id: UUID) async {
@@ -612,39 +622,83 @@ public final class AppModel {
         await refreshPlayback()
     }
 
-    /// Spotify sometimes answers "OK" to a play command and then plays nothing (a stuck Connect session).
-    /// So check that the song actually started, and if not: wake the device and retry, then ask the
-    /// Spotify app directly, then resend the list so the rest of the queue follows.
+    /// Starts the queue. MoodMix writes it into its private "MoodMix Queue" playlist and plays that,
+    /// because Spotify's desktop app can accept a bare list of songs and then silently drop it.
+    /// Then it checks the song actually started, and if not wakes the device, retries, and finally
+    /// asks the Spotify app directly.
     private func startPlayback(uris: [String], positionMs: Int, expecting track: Track) async throws {
-        lastSentAt = Date()
-        try await api.play(uris: uris, positionMs: positionMs)
+        let context = await syncQueuePlaylist(uris)
+        func attempt() async throws {
+            lastSentAt = Date()
+            if let context {
+                try await api.play(contextURI: context, offsetURI: track.uri, positionMs: positionMs)
+            } else {
+                try await api.play(uris: uris, positionMs: positionMs)
+            }
+        }
+        try await attempt()
         if await waitUntilPlaying(track) { return }
 
         ActivityLog.write("Spotify accepted play but \(track.name) didn't start; waking the device")
         busy = "Waking up Spotify…"
-        let device = try await api.playbackDeviceID()
-        try? await api.transfer(to: device)
+        try? await api.transfer(to: try await api.playbackDeviceID())
         try? await Task.sleep(for: .seconds(1))
-        lastSentAt = Date()
-        try await api.play(uris: uris, positionMs: positionMs)
+        try await attempt()
         if await waitUntilPlaying(track) { return }
 
-        if let playLocally, await playLocally(track.uri) {
+        if let playLocally, await playLocally(track.uri, context) {
             ActivityLog.write("asked the Spotify app directly to play \(track.name)")
-            try? await Task.sleep(for: .seconds(2))
             lastSentAt = Date()
-            try await api.play(uris: uris, positionMs: positionMs)
-            if await waitUntilPlaying(track) { return }
+            if await waitUntilPlaying(track) {
+                if positionMs > 2_000 { try? await api.seek(to: positionMs) }
+                return
+            }
         }
         ActivityLog.write("Spotify still isn't playing \(track.name)")
         throw SpotifyError.notResponding
     }
 
-    /// Polls for up to ~3 s until Spotify reports the expected song playing.
+    /// Writes the queue into the "MoodMix Queue" playlist (creating it the first time) and returns its URI,
+    /// or nil when MoodMix isn't allowed to edit playlists (then it falls back to a plain list of songs).
+    private func syncQueuePlaylist(_ uris: [String]) async -> String? {
+        guard canEditPlaylists else { return nil }
+        do {
+            if queuePlaylistID == nil { queuePlaylistID = try await api.createQueuePlaylist() }
+            do {
+                try await api.replaceItems(inPlaylist: queuePlaylistID!, with: uris)
+            } catch SpotifyError.http(404, _) {
+                // You deleted it in Spotify: make a new one.
+                queuePlaylistID = try await api.createQueuePlaylist()
+                try await api.replaceItems(inPlaylist: queuePlaylistID!, with: uris)
+            }
+            return queuePlaylistURI
+        } catch {
+            ActivityLog.write("couldn't update the MoodMix Queue playlist: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Appends songs added at the end (or mood top-ups) to the queue playlist, without interrupting playback.
+    private func appendUnsent() async -> Bool {
+        guard playingFromQueuePlaylist, let id = queuePlaylistID else { return false }
+        let songs = queue.unsent.map(\.track.uri)
+        guard !songs.isEmpty else { return true }
+        do {
+            try await api.appendItems(toPlaylist: id, uris: songs)
+            queue.markAllSent()
+            ActivityLog.write("appended \(songs.count) songs to the queue playlist")
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Polls for up to ~5 s until Spotify reports the expected song playing.
     private func waitUntilPlaying(_ track: Track) async -> Bool {
-        for _ in 0..<6 {
+        for _ in 0..<10 {
             try? await Task.sleep(for: .milliseconds(500))
-            if let state = try? await api.currentPlayback(), state.track.id == track.id, state.isPlaying {
+            if let state = try? await api.currentPlayback(), state.isPlaying,
+               state.track.id == track.id || state.track.name == track.name {
                 nowPlaying = state
                 return true
             }
@@ -656,7 +710,7 @@ public final class AppModel {
     private func followQueue(previous: NowPlaying? = nil) async {
         guard queueActive, let np = nowPlaying else { return }
         // You started a playlist/album in Spotify yourself: hands off, even if its songs are also in the queue.
-        if let context = np.contextURI {
+        if let context = np.contextURI, context != queuePlaylistURI {
             // Right after MoodMix sends a mix, Spotify can still report the old playlist for a moment.
             guard Date().timeIntervalSince(lastSentAt) > 8 else { return }
             queueActive = false
@@ -695,6 +749,8 @@ public final class AppModel {
         guard np.isPlaying, resendTask == nil else { return }
         if pendingResend {
             await sendQueue(positionMs: currentProgress, reason: "edits made while paused")
+        } else if !queue.unsent.isEmpty, await appendUnsent() {
+            // Playing from the queue playlist: new songs were simply added to its end.
         } else if queue.needsResend {
             // Spotify is on the last song it was given: hand it the rest while this one is still early.
             await sendQueue(positionMs: currentProgress, reason: "topping up the queue")
