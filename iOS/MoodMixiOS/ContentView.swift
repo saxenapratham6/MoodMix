@@ -515,7 +515,13 @@ private struct SettingsSheet: View {
                 } header: {
                     Text("Spotify")
                 } footer: {
-                    Text("In your app at developer.spotify.com/dashboard, add the Redirect URI moodmix://callback (keep the Mac one too).")
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !model.clientID.isEmpty && !model.clientIDLooksValid {
+                            Label("That doesn't look like a Client ID (32 letters and digits).", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        Text("Use the same Client ID as on your Mac. It's the one labeled Client ID, not the Client secret. In your app at developer.spotify.com/dashboard, also add the Redirect URI moodmix://callback (keep the Mac one too).")
+                    }
                 }
                 if model.isLoggedIn {
                     Section {

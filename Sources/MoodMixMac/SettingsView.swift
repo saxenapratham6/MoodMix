@@ -9,6 +9,10 @@ struct SettingsView: View {
         Form {
             Section("Spotify") {
                 TextField("Client ID", text: $model.clientID)
+                if !model.clientID.isEmpty && !model.clientIDLooksValid {
+                    Label("That doesn't look like a Client ID (32 letters and digits). Make sure it isn't the Client secret.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 if model.isLoggedIn {
                     HStack {
                         Text(model.canEditPlaylists ? "Connected, with permission to save playlists." : "Connected. Log in again to allow saving playlists and removing duplicates.")

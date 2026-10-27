@@ -5,7 +5,20 @@ import Observation
 @MainActor @Observable
 public final class AppModel {
     // Settings
-    public var clientID: String { didSet { UserDefaults.standard.set(clientID, forKey: "spotify.clientID"); rebuildAuth() } }
+    public var clientID: String {
+        didSet {
+            // Pasted IDs often carry a stray space or newline, which Spotify rejects as "client_id: Invalid".
+            let trimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed == clientID else { clientID = trimmed; return }
+            UserDefaults.standard.set(clientID, forKey: "spotify.clientID")
+            rebuildAuth()
+        }
+    }
+
+    /// Spotify Client IDs are 32 hexadecimal characters.
+    public var clientIDLooksValid: Bool {
+        clientID.count == 32 && clientID.allSatisfy(\.isHexDigit)
+    }
     public var anthropicKey: String { didSet { Keychain.set(anthropicKey, for: "anthropic.apiKey") } }
     public var claudeModel: String { didSet { UserDefaults.standard.set(claudeModel, forKey: "claude.model") } }
 
@@ -112,7 +125,7 @@ public final class AppModel {
     // MARK: Account
 
     public func logIn(with provider: AuthCodeProvider) async {
-        await run("Waiting for Spotify login in your browser…") {
+        await run("Waiting for Spotify login…") {
             try await self.auth.logIn(using: provider)
             self.isLoggedIn = true
             self.canEditPlaylists = await self.auth.hasScope("playlist-modify-private")

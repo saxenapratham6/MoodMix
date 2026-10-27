@@ -26,6 +26,7 @@ targets:
       path: MoodMixiOS/Info.plist
       properties:
         CFBundleDisplayName: MoodMix
+        CFBundleName: MoodMix
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
