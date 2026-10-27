@@ -86,6 +86,7 @@ public final class AppModel {
             favorites = library.favorites ?? FavoriteSignals()
             if let id = selectedPlaylistID, let cached = library.tracks[id] { tracks = cached.tracks }
             isLoggedIn = await auth.isLoggedIn
+            canEditPlaylists = await auth.hasScope("playlist-modify-private")
             if isLoggedIn { await refreshLibrary() }
             await backgroundLoop()
         }
@@ -114,6 +115,7 @@ public final class AppModel {
         await run("Waiting for Spotify login in your browser…") {
             try await self.auth.logIn(using: provider)
             self.isLoggedIn = true
+            self.canEditPlaylists = await self.auth.hasScope("playlist-modify-private")
         }
         if isLoggedIn { await refreshLibrary() }
     }
@@ -321,6 +323,49 @@ public final class AppModel {
     private func rememberPick(_ mood: Mood) {
         let history = (moodHistory + [MoodPick(date: Date(), mood: mood)]).suffix(300)
         UserDefaults.standard.set(try? JSONEncoder().encode(Array(history)), forKey: "mood.history")
+    }
+
+    // MARK: Playlists you can keep
+
+    /// False for logins made before MoodMix asked to edit playlists; log in again to allow it.
+    public private(set) var canEditPlaylists = false
+    public private(set) var duplicates: [SpotifyAPI.Duplicate]?
+
+    /// Saves what's queued (or the last mix) as a private playlist in your Spotify library.
+    public func saveQueueAsPlaylist() async -> URL? {
+        let songs = queue.isEmpty ? mix.map(\.track) : [queue.current!.track] + queue.upcoming.map(\.track)
+        guard !songs.isEmpty else { return nil }
+        let moodName = journeyMode && journey.count >= 2 ? journey.map(\.title).joined(separator: " → ") : (queue.mood ?? mood).title
+        let name = "MoodMix · \(moodName) · \(Date().formatted(.dateTime.month(.abbreviated).day()))"
+        let description = "\(songs.count) songs from \(selectedPlaylist?.name ?? "my playlist"), mixed by MoodMix."
+        var url: URL?
+        await run("Saving playlist…") {
+            url = try await self.api.createPlaylist(name: name, description: description, uris: songs.map(\.uri))
+            ActivityLog.write("saved playlist \(name) with \(songs.count) songs")
+            self.playlists = try await self.api.myPlaylists()
+            self.library.playlists = self.playlists
+            await self.libraryCache.save(self.library)
+        }
+        return url
+    }
+
+    /// Looks up which songs appear more than once in the selected playlist.
+    public func findDuplicates() async {
+        guard let id = selectedPlaylistID else { return }
+        await run("Checking for duplicates…") {
+            self.duplicates = try await self.api.duplicates(inPlaylist: id)
+        }
+    }
+
+    /// Removes extra copies from the playlist in Spotify, keeping one copy where the first one was.
+    public func removeDuplicates() async {
+        guard let id = selectedPlaylistID, let duplicates, !duplicates.isEmpty else { return }
+        await run("Removing \(duplicates.count) duplicates…") {
+            try await self.api.removeDuplicates(duplicates, inPlaylist: id)
+            ActivityLog.write("removed duplicates: \(duplicates.map(\.name).joined(separator: ", "))")
+            self.duplicates = []
+        }
+        await refreshLibrary()
     }
 
     // MARK: Your corrections

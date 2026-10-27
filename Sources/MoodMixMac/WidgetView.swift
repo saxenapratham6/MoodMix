@@ -1,4 +1,5 @@
 import AppKit
+import Charts
 import MoodMixCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -338,7 +339,7 @@ private struct BubblePill: View {
 
 // MARK: - Card
 
-private enum CardTab { case mix, queue }
+private enum CardTab { case mix, queue, insights }
 
 private struct ExpandedCard: View {
     @Environment(AppModel.self) private var model
@@ -364,6 +365,8 @@ private struct ExpandedCard: View {
                             Controls { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { tab = .queue } }
                         case .queue:
                             QueueView()
+                        case .insights:
+                            InsightsView()
                         }
                     }
                     .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
@@ -401,6 +404,9 @@ private struct ExpandedCard: View {
             GlassPill(title: model.queue.isEmpty ? "Queue" : "Queue · \(model.queue.upcoming.count)",
                       symbol: "list.bullet", selected: tab == .queue) {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { tab = .queue }
+            }
+            GlassPill(title: "Insights", symbol: "chart.bar.xaxis", selected: tab == .insights) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { tab = .insights }
             }
             Spacer()
         }
@@ -697,6 +703,7 @@ private struct QueueView: View {
                 HStack {
                     section("Next up")
                     Spacer()
+                    SaveQueueButton()
                     if let mood = model.queue.mood {
                         Label("then more \(mood.title.lowercased())", systemImage: "infinity")
                             .font(.caption).foregroundStyle(.white.opacity(0.55))
@@ -821,6 +828,149 @@ private struct QueueRow: View {
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { if !isCurrent { Task { await model.jumpInQueue(to: item.id) } } }
         .contextMenu { RetagMenu(trackID: item.track.id) }
+    }
+}
+
+/// Saves the queue as a private playlist in Spotify, then offers to open it.
+private struct SaveQueueButton: View {
+    @Environment(AppModel.self) private var model
+    @State private var saved: URL?
+
+    var body: some View {
+        if let saved {
+            Button { NSWorkspace.shared.open(saved) } label: {
+                Label("Saved · Open", systemImage: "checkmark.circle.fill").font(.caption.weight(.semibold)).foregroundStyle(Theme.green)
+            }
+            .buttonStyle(.pressable)
+        } else if model.canEditPlaylists {
+            Button {
+                Task { saved = await model.saveQueueAsPlaylist() }
+            } label: {
+                Label("Save as playlist", systemImage: "square.and.arrow.down").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.pressable)
+            .disabled(model.busy != nil)
+            .help("Save this queue as a private playlist in your Spotify library")
+        } else {
+            Button { Task { await model.logIn(with: LoopbackAuthProvider()) } } label: {
+                Label("Allow saving", systemImage: "lock.open").font(.caption.weight(.semibold))
+            }
+            .buttonStyle(.pressable)
+            .help("Log in to Spotify once more so MoodMix may create playlists")
+        }
+    }
+}
+
+/// How the playlist breaks down by mood, your most-played songs, and housekeeping.
+private struct InsightsView: View {
+    @Environment(AppModel.self) private var model
+    @State private var confirmRemove = false
+
+    var body: some View {
+        let counts = Mood.allCases.map { mood in
+            (mood: mood, count: model.tracks.filter { model.profiles[$0.id]?.moods.first == mood }.count)
+        }
+        let thin = counts.filter { $0.count < 25 }.sorted { $0.count < $1.count }
+        let learned = model.tracks.filter { !(model.profiles[$0.id]?.feedback?.isEmpty ?? true) }.count
+        let mostYou = model.tracks.sorted { model.favorites.score(for: $0.id) > model.favorites.score(for: $1.id) }.prefix(5)
+
+        VStack(alignment: .leading, spacing: 12) {
+            section("Your playlist by mood")
+            Chart(counts, id: \.mood) { item in
+                BarMark(x: .value("Songs", item.count), y: .value("Mood", item.mood.title))
+                    .foregroundStyle(item.mood.color.gradient)
+                    .cornerRadius(4)
+                    .annotation(position: .trailing) {
+                        Text("\(item.count)").font(.caption2.monospacedDigit()).foregroundStyle(.white.opacity(0.7))
+                    }
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks { _ in AxisValueLabel().foregroundStyle(.white.opacity(0.85)) }
+            }
+            .frame(height: 170)
+
+            if let thinnest = thin.first {
+                Label("Only \(thinnest.count) \(thinnest.mood.title.lowercased()) songs. Add a few more for longer \(thinnest.mood.title.lowercased()) mixes.",
+                      systemImage: "lightbulb")
+                    .font(.caption).foregroundStyle(.white.opacity(0.75))
+            }
+            if learned > 0 {
+                Label("Learned from how you listened to \(learned) songs (skips and full plays).", systemImage: "brain")
+                    .font(.caption).foregroundStyle(.white.opacity(0.75))
+            }
+
+            section("Most you").padding(.top, 4)
+            VStack(spacing: 4) {
+                ForEach(Array(mostYou)) { track in
+                    HStack(spacing: 10) {
+                        Artwork(url: track.artworkURL, size: 30, radius: 5)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(track.name).font(.callout).lineLimit(1)
+                            Text(track.artistLine).font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        }
+                        Spacer()
+                        if let mood = model.profiles[track.id]?.moods.first { MoodTag(mood: mood) }
+                    }
+                    .contextMenu { RetagMenu(trackID: track.id) }
+                }
+            }
+
+            section("Duplicates").padding(.top, 4)
+            duplicates
+        }
+    }
+
+    @ViewBuilder private var duplicates: some View {
+        if !model.canEditPlaylists {
+            HStack {
+                Text("Log in again to let MoodMix tidy your playlist.").font(.caption).foregroundStyle(.white.opacity(0.7))
+                Spacer()
+                Button("Log in") { Task { await model.logIn(with: LoopbackAuthProvider()) } }
+                    .buttonStyle(.pressable).font(.caption.weight(.bold)).foregroundStyle(Theme.green)
+            }
+        } else if let found = model.duplicates {
+            if found.isEmpty {
+                Label("No duplicates in this playlist.", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(Theme.green)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(found) { dup in
+                        Text("• \(dup.name) — \(dup.artists) (×\(dup.copies))").font(.caption).lineLimit(1)
+                    }
+                }
+                if confirmRemove {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("This edits \(model.selectedPlaylist?.name ?? "the playlist") in Spotify: the extra copies are removed and one copy stays where the first one was. Spotify will show it as re-added today.")
+                            .font(.caption).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Button("Cancel") { confirmRemove = false }.buttonStyle(.pressable).font(.caption.weight(.semibold))
+                            Spacer()
+                            Button("Remove \(found.count) extra cop\(found.count == 1 ? "y" : "ies")") {
+                                confirmRemove = false
+                                Task { await model.removeDuplicates() }
+                            }
+                            .buttonStyle(.pressable)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(10)
+                    .background(.orange.opacity(0.12), in: .rect(cornerRadius: 10))
+                } else {
+                    Button("Remove extra copies…") { confirmRemove = true }
+                        .buttonStyle(.pressable).font(.caption.weight(.bold)).foregroundStyle(Theme.green)
+                }
+            }
+        } else {
+            Button("Check for duplicates") { Task { await model.findDuplicates() } }
+                .buttonStyle(.pressable).font(.caption.weight(.bold)).foregroundStyle(Theme.green)
+                .disabled(model.busy != nil)
+        }
+    }
+
+    private func section(_ title: String) -> some View {
+        Text(title.uppercased()).font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.6))
     }
 }
 

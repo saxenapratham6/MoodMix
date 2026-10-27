@@ -52,6 +52,71 @@ public struct SpotifyAPI: Sendable {
         return result.filter { seen.insert($0.id).inserted }
     }
 
+    // MARK: Editing playlists
+
+    /// Creates a private playlist in your library and fills it, in order. Returns its Spotify URL.
+    public func createPlaylist(name: String, description: String, uris: [String]) async throws -> URL? {
+        struct Created: Decodable {
+            struct Links: Decodable { let spotify: String? }
+            let id: String
+            let external_urls: Links?
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["name": name, "description": description, "public": false])
+        let created = try JSONDecoder().decode(Created.self, from: try await send("POST", endpoint("me/playlists"), body: body))
+        for chunk in uris.chunked(into: 100) {
+            let add = try JSONSerialization.data(withJSONObject: ["uris": chunk])
+            try await send("POST", endpoint("playlists/\(created.id)/items"), body: add)
+        }
+        return created.external_urls?.spotify.flatMap(URL.init(string:))
+    }
+
+    public struct Duplicate: Sendable, Identifiable {
+        public var id: String { uri }
+        public let uri: String
+        public let name: String
+        public let artists: String
+        public let firstPosition: Int
+        public let copies: Int
+    }
+
+    /// Songs that appear more than once in a playlist, with where the first copy sits.
+    public func duplicates(inPlaylist id: String) async throws -> [Duplicate] {
+        struct Page: Decodable { let items: [PlaylistItem]; let next: String? }
+        var entries: [(uri: String, name: String, artists: String)] = []
+        var url: URL? = endpoint("playlists/\(id)/items", ["limit": "100"])
+        while let u = url {
+            let page: Page = try await get(u)
+            for item in page.items {
+                let t = item.item ?? item.track
+                entries.append((t?.uri ?? "", t?.name ?? "", t?.artists?.map(\.name).joined(separator: ", ") ?? ""))
+            }
+            url = page.next.flatMap(URL.init(string:))
+        }
+        var firstSeen: [String: Int] = [:]
+        var counts: [String: Int] = [:]
+        for (i, e) in entries.enumerated() where e.uri.hasPrefix("spotify:track:") {
+            if firstSeen[e.uri] == nil { firstSeen[e.uri] = i }
+            counts[e.uri, default: 0] += 1
+        }
+        return counts.filter { $0.value > 1 }.compactMap { uri, n in
+            guard let first = firstSeen[uri] else { return nil }
+            let e = entries[first]
+            return Duplicate(uri: uri, name: e.name, artists: e.artists, firstPosition: first, copies: n)
+        }
+        .sorted { $0.firstPosition < $1.firstPosition }
+    }
+
+    /// Keeps one copy of each duplicate, where the first copy was. Spotify can only remove every copy of a song,
+    /// so each one is removed and then put back at its first position (latest positions first, so earlier ones don't shift).
+    public func removeDuplicates(_ duplicates: [Duplicate], inPlaylist id: String) async throws {
+        for dup in duplicates.sorted(by: { $0.firstPosition > $1.firstPosition }) {
+            let remove = try JSONSerialization.data(withJSONObject: ["items": [["uri": dup.uri]]])
+            try await send("DELETE", endpoint("playlists/\(id)/items"), body: remove)
+            let add = try JSONSerialization.data(withJSONObject: ["uris": [dup.uri], "position": dup.firstPosition])
+            try await send("POST", endpoint("playlists/\(id)/items"), body: add)
+        }
+    }
+
     /// Changes whenever the playlist is edited, so it's a cheap way to detect added songs.
     public func playlistSnapshot(_ id: String) async throws -> String? {
         struct R: Decodable { let snapshot_id: String? }

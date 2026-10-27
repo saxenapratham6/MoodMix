@@ -9,6 +9,14 @@ struct SettingsView: View {
         Form {
             Section("Spotify") {
                 TextField("Client ID", text: $model.clientID)
+                if model.isLoggedIn {
+                    HStack {
+                        Text(model.canEditPlaylists ? "Connected, with permission to save playlists." : "Connected. Log in again to allow saving playlists and removing duplicates.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Log in again") { Task { await model.logIn(with: LoopbackAuthProvider()) } }
+                    }
+                }
                 Text("Create an app at developer.spotify.com/dashboard, select Web API, and add the Redirect URI **http://127.0.0.1:8888/callback**. Then paste its Client ID here.")
                     .font(.caption).foregroundStyle(.secondary)
             }

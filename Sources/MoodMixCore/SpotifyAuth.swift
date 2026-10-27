@@ -37,12 +37,20 @@ public actor SpotifyAuth {
         "playlist-read-private", "playlist-read-collaborative",
         "user-top-read", "user-library-read",
         "user-read-playback-state", "user-modify-playback-state",
+        "playlist-modify-private", "playlist-modify-public",
     ]
 
     struct Tokens: Codable {
         var accessToken: String
         var refreshToken: String
         var expiresAt: Date
+        /// Space-separated scopes Spotify granted (missing for logins from older versions).
+        var scope: String?
+    }
+
+    /// Whether the login allows a scope. Logins from before MoodMix asked for it don't.
+    public func hasScope(_ scope: String) -> Bool {
+        tokens?.scope?.split(separator: " ").contains { $0 == scope } ?? false
     }
 
     private let clientID: String
@@ -112,11 +120,12 @@ public actor SpotifyAuth {
             if form["grant_type"] == "refresh_token" { logOut() }
             throw SpotifyError.authFailed(String(decoding: data, as: UTF8.self))
         }
-        struct Response: Decodable { let access_token: String; let refresh_token: String?; let expires_in: Double }
+        struct Response: Decodable { let access_token: String; let refresh_token: String?; let expires_in: Double; let scope: String? }
         let r = try JSONDecoder().decode(Response.self, from: data)
         let new = Tokens(accessToken: r.access_token,
                          refreshToken: r.refresh_token ?? tokens?.refreshToken ?? "",
-                         expiresAt: Date().addingTimeInterval(r.expires_in))
+                         expiresAt: Date().addingTimeInterval(r.expires_in),
+                         scope: r.scope ?? tokens?.scope)
         tokens = new
         Keychain.set(String(decoding: try JSONEncoder().encode(new), as: UTF8.self), for: "spotify.tokens")
     }
