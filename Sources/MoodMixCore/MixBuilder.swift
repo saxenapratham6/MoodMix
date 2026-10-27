@@ -62,6 +62,12 @@ public enum MixBuilder {
     /// 0...1 fit between a track and a mood, from Claude's labels and/or audio features.
     public static func moodScore(_ profile: TrackProfile?, mood: Mood) -> Double {
         guard let profile else { return 0 }
+        let base = baseMoodScore(profile, mood: mood)
+        guard base > 0, let adjustment = profile.feedback?[mood.rawValue] else { return base }
+        return min(max(base + adjustment, 0), 1)
+    }
+
+    static func baseMoodScore(_ profile: TrackProfile, mood: Mood) -> Double {
         var tagScore: Double?
         if !profile.moods.isEmpty {
             if let i = profile.moods.firstIndex(of: mood) {

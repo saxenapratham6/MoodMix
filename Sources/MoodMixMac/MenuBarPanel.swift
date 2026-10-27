@@ -15,7 +15,11 @@ struct MenuBarPanel: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
                     ForEach(Mood.allCases) { mood in
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { model.mood = mood }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                model.autoMood = false
+                                model.journeyMode = false
+                                model.mood = mood
+                            }
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: mood.symbol).font(.system(size: 15, weight: .semibold))
@@ -46,6 +50,13 @@ struct MenuBarPanel: View {
                 .disabled(model.nowPlaying == nil)
             }
 
+            if model.autoMood, let suggestion = model.suggestion {
+                Label("Auto: \(suggestion.mood.title) · \(suggestion.reason)", systemImage: "sparkles")
+                    .font(.caption).foregroundStyle(.white.opacity(0.75))
+            }
+            if let sleep = model.sleepTimerText {
+                Label(sleep, systemImage: "moon.zzz.fill").font(.caption).foregroundStyle(Theme.green)
+            }
             if let status = model.statusLine {
                 Text(status).font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(2)
             }

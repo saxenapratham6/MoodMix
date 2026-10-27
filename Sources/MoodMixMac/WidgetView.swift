@@ -428,6 +428,7 @@ private struct ExpandedCard: View {
             }
             .buttonStyle(.pressable)
             Spacer()
+            SleepTimerMenu()
             CircleIconButton(symbol: "circle.dashed", help: "Shrink to a bubble") { controller.shrinkToBubble() }
             SettingsLink {
                 Image(systemName: "gearshape.fill")
@@ -492,18 +493,62 @@ private struct Controls: View {
 
             GlassGroup(spacing: 8) {
                 VStack(alignment: .leading, spacing: 8) {
-                    section("Mood")
+                    HStack(spacing: 8) {
+                        section(model.journeyMode ? "Journey" : "Mood")
+                        Spacer()
+                        SmallToggle(title: "Auto", symbol: "sparkles", on: model.autoMood && !model.journeyMode) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                model.autoMood.toggle()
+                                if model.autoMood { model.journeyMode = false }
+                            }
+                        }
+                        .help("Pick the mood from the time of day, your headphones and your habits")
+                        SmallToggle(title: "Journey", symbol: "point.topleft.down.to.point.bottomright.curvepath",
+                                    on: model.journeyMode) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                model.journeyMode.toggle()
+                                if model.journeyMode { model.autoMood = false }
+                            }
+                        }
+                        .help("Travel through several moods in one mix, e.g. Sad → Chill → Happy")
+                    }
+                    if model.journeyMode {
+                        journeyRoute
+                    } else if model.autoMood, let suggestion = model.suggestion {
+                        Label("\(suggestion.mood.title) · \(suggestion.reason)", systemImage: "sparkles")
+                            .font(.caption).foregroundStyle(.white.opacity(0.75))
+                    }
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                         ForEach(Mood.allCases) { mood in
-                            GlassPill(title: mood.title, symbol: mood.symbol, selected: model.mood == mood, fill: true) {
-                                withAnimation(.easeInOut(duration: 0.25)) { model.mood = mood }
+                            GlassPill(title: mood.title, symbol: mood.symbol, selected: isSelected(mood), fill: true) {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    if model.journeyMode {
+                                        model.toggleJourneyMood(mood)
+                                    } else {
+                                        model.autoMood = false
+                                        model.mood = mood
+                                    }
+                                }
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                if model.journeyMode, let step = model.journey.firstIndex(of: mood) {
+                                    Text("\(step + 1)")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.black)
+                                        .frame(width: 16, height: 16)
+                                        .background(Theme.green, in: .circle)
+                                        .offset(x: 4, y: -5)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
                             }
                         }
                     }
-                    section("Energy").padding(.top, 6)
-                    HStack(spacing: 8) {
-                        ForEach(EnergyArc.allCases) { arc in
-                            GlassPill(title: arc.title, selected: model.arc == arc, fill: true) { model.arc = arc }
+                    if !model.journeyMode {
+                        section("Energy").padding(.top, 6)
+                        HStack(spacing: 8) {
+                            ForEach(EnergyArc.allCases) { arc in
+                                GlassPill(title: arc.title, selected: model.arc == arc, fill: true) { model.arc = arc }
+                            }
                         }
                     }
                 }
@@ -558,6 +603,9 @@ private struct Controls: View {
                 Text(s)
             } else {
                 Text("\(model.tracks.count) songs · \(model.taggedCount) with moods · \(model.favoriteCount) favorites")
+                if let sleep = model.sleepTimerText {
+                    Label(sleep, systemImage: "moon.zzz.fill").foregroundStyle(Theme.green)
+                }
                 if model.skippedCount > 0 {
                     Text("· \(model.skippedCount) duplicate\(model.skippedCount == 1 ? "" : "s") skipped")
                         .help("Your Spotify playlist has \(model.selectedPlaylist?.trackCount ?? 0) entries; songs added more than once are counted once.")
@@ -571,6 +619,32 @@ private struct Controls: View {
 
     private func section(_ title: String) -> some View {
         Text(title.uppercased()).font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.6))
+    }
+
+    private func isSelected(_ mood: Mood) -> Bool {
+        if model.journeyMode { return model.journey.contains(mood) }
+        if model.autoMood { return model.suggestion?.mood == mood }
+        return model.mood == mood
+    }
+
+    @ViewBuilder private var journeyRoute: some View {
+        if model.journey.isEmpty {
+            Text("Tap up to 4 moods in the order you want to go through them.")
+                .font(.caption).foregroundStyle(.white.opacity(0.7))
+        } else {
+            HStack(spacing: 6) {
+                ForEach(Array(model.journey.enumerated()), id: \.element) { i, mood in
+                    if i > 0 { Image(systemName: "arrow.right").font(.caption2.bold()).foregroundStyle(.white.opacity(0.5)) }
+                    MoodTag(mood: mood)
+                }
+                Spacer()
+                if model.journey.count < 2 {
+                    Text("add one more").font(.caption).foregroundStyle(.white.opacity(0.6))
+                }
+                Button("Clear") { withAnimation { model.clearJourney() } }
+                    .buttonStyle(.pressable).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+            }
+        }
     }
 
     private func actionButton(_ title: String, symbol: String, help: String, action: @escaping () async -> Void) -> some View {
@@ -746,6 +820,84 @@ private struct QueueRow: View {
         .contentShape(.rect)
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { if !isCurrent { Task { await model.jumpInQueue(to: item.id) } } }
+        .contextMenu { RetagMenu(trackID: item.track.id) }
+    }
+}
+
+/// Right-click a song: "This song is more…" — your call beats Claude's label.
+struct RetagMenu: View {
+    @Environment(AppModel.self) private var model
+    let trackID: String
+
+    var body: some View {
+        let current = model.profiles[trackID]?.moods.first
+        Menu("This song is more…") {
+            ForEach(Mood.allCases) { mood in
+                Button {
+                    model.retag(trackID, as: mood)
+                } label: {
+                    Label(mood.title + (mood == current ? " ✓" : ""), systemImage: mood.symbol)
+                }
+            }
+        }
+    }
+}
+
+struct SleepTimerMenu: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Menu {
+            Button("Off") { model.setSleepTimer(.off) }
+            Divider()
+            Button("At the end of this song") { model.setSleepTimer(.endOfSong) }
+                .disabled(model.nowPlaying == nil)
+            Button("At the end of the mix") { model.setSleepTimer(.endOfMix) }
+                .disabled(model.queue.isEmpty)
+            Divider()
+            ForEach([15, 30, 45, 60, 90], id: \.self) { minutes in
+                Button("In \(minutes) minutes (fade out)") { model.setSleepTimer(.minutes(minutes)) }
+            }
+        } label: {
+            Image(systemName: model.sleepTimer.isOn ? "moon.zzz.fill" : "moon.zzz")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(model.sleepTimer.isOn ? Theme.green : .white)
+                .frame(width: 30, height: 30)
+                .liquidGlass(interactive: true, in: Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(model.sleepTimerText ?? "Sleep timer")
+    }
+}
+
+/// A small on/off capsule (Auto, Journey).
+struct SmallToggle: View {
+    let title: String
+    let symbol: String
+    let on: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .foregroundStyle(on ? .black : .white)
+                .background(on ? Theme.green : .clear, in: .capsule)
+                .modifier(OffGlass(on: on))
+        }
+        .buttonStyle(.pressable)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: on)
+    }
+
+    private struct OffGlass: ViewModifier {
+        let on: Bool
+        func body(content: Content) -> some View {
+            if on { content } else { content.liquidGlass(interactive: true, in: Capsule()) }
+        }
     }
 }
 

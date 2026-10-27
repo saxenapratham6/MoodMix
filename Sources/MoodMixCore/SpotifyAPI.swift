@@ -104,7 +104,9 @@ public struct SpotifyAPI: Sendable {
     public func currentPlayback() async throws -> NowPlaying? {
         struct R: Decodable {
             struct Context: Decodable { let uri: String? }
+            struct Device: Decodable { let volume_percent: Int? }
             let is_playing: Bool
+            let device: Device?
             let progress_ms: Int?
             let item: TrackObject?
             let context: Context?
@@ -112,11 +114,15 @@ public struct SpotifyAPI: Sendable {
         let data = try await send("GET", endpoint("me/player"))
         guard !data.isEmpty, let r = try? JSONDecoder().decode(R.self, from: data), let track = r.item?.asTrack() else { return nil }
         return NowPlaying(track: track, isPlaying: r.is_playing, progressMs: r.progress_ms ?? 0, fetchedAt: Date(),
-                          contextURI: r.context?.uri)
+                          contextURI: r.context?.uri, volumePercent: r.device?.volume_percent)
     }
 
     public func pause() async throws { try await send("PUT", endpoint("me/player/pause")) }
     public func resume() async throws { try await send("PUT", endpoint("me/player/play")) }
+    public func setVolume(_ percent: Int) async throws {
+        try await send("PUT", endpoint("me/player/volume", ["volume_percent": "\(min(max(percent, 0), 100))"]))
+    }
+
     public func next() async throws { try await send("POST", endpoint("me/player/next")) }
     public func previous() async throws { try await send("POST", endpoint("me/player/previous")) }
 

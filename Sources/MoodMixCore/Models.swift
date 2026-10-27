@@ -40,6 +40,8 @@ public struct NowPlaying: Hashable, Sendable {
     /// The playlist/album/artist Spotify is playing from. MoodMix plays a plain list of songs,
     /// which has no context, so a non-nil value means you started this yourself in Spotify.
     public var contextURI: String? = nil
+    /// The device's volume (0–100), when Spotify reports it.
+    public var volumePercent: Int? = nil
 
     /// Progress extrapolated from the last poll, so the bar moves smoothly.
     public func progress(at date: Date) -> Int {
@@ -87,6 +89,10 @@ public struct TrackProfile: Codable, Hashable, Sendable {
     /// Mood labels from Claude, strongest first.
     public var moods: [Mood]
     public var genre: String?
+    /// Learned from listening: mood raw value → adjustment (skips lower it, full listens raise it).
+    public var feedback: [String: Double]?
+    /// You set this song's mood yourself, so analysis never overwrites it.
+    public var userTagged: Bool?
 
     public init(features: AudioFeatures? = nil, featureSource: FeatureSource? = nil, moods: [Mood] = [], genre: String? = nil) {
         self.features = features

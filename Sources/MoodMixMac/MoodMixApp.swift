@@ -7,6 +7,7 @@ enum Shared {
     static let model: AppModel = {
         let model = AppModel()
         model.beforePlayback = { await SpotifyLauncher.ensureRunning() }
+        model.momentProvider = { MomentContext(headphones: AudioRoute.headphonesConnected) }
         return model
     }()
     static let palette = ArtworkPalette()

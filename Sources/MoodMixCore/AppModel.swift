@@ -30,6 +30,21 @@ public final class AppModel {
     public var favoriteWeight = 0.4
     public private(set) var mix: [MixEntry] = []
 
+    /// Journey mode: the mix travels through `journey`'s moods in order.
+    public var journeyMode = false
+    public private(set) var journey: [Mood] = []
+
+    /// Let MoodMix pick the mood from the time of day, your headphones and your habits.
+    public var autoMood: Bool { didSet { UserDefaults.standard.set(autoMood, forKey: "mood.auto"); updateSuggestion() } }
+    public private(set) var suggestion: MoodSuggester.Suggestion?
+    /// Platform hook describing the moment (macOS adds whether headphones are connected).
+    @ObservationIgnored public var momentProvider: (() -> MomentContext)?
+
+    public private(set) var sleepTimer: SleepTimer = .off
+    @ObservationIgnored private var sleepTask: Task<Void, Never>?
+    /// The last song of the mix you generated, for "stop at end of mix".
+    @ObservationIgnored private var mixEndTrackID: String?
+
     // Status
     public private(set) var busy: String?
     /// Mood labeling runs in the background without blocking the rest of the app.
@@ -60,6 +75,7 @@ public final class AppModel {
         clientID = UserDefaults.standard.string(forKey: "spotify.clientID") ?? ""
         anthropicKey = Keychain.get("anthropic.apiKey") ?? ""
         claudeModel = UserDefaults.standard.string(forKey: "claude.model") ?? ClaudeTagger.defaultModel
+        autoMood = UserDefaults.standard.bool(forKey: "mood.auto")
         selectedPlaylistID = UserDefaults.standard.string(forKey: "playlist.id")
         auth = SpotifyAuth(clientID: UserDefaults.standard.string(forKey: "spotify.clientID") ?? "")
         Task {
@@ -254,12 +270,154 @@ public final class AppModel {
         await sendQueue(positionMs: 0)
     }
 
-    /// A fresh mix for the selected mood, played right away as MoodMix's queue.
+    /// A fresh mix for the selected mood (or journey), played right away as MoodMix's queue.
     public func generate() async {
-        buildMix()
+        var queueMood = mood
+        if journeyMode && journey.count >= 2 {
+            mix = MixBuilder.buildJourney(journey, tracks: tracks, profiles: profiles, favorites: favorites,
+                                          minutes: minutes, favoriteWeight: favoriteWeight)
+            queueMood = journey.last!
+            if mix.isEmpty { errorMessage = "Not enough songs in this playlist for that journey yet." }
+        } else {
+            if autoMood {
+                updateSuggestion()
+                if let suggestion { mood = suggestion.mood }
+            } else {
+                rememberPick(mood)
+            }
+            queueMood = mood
+            buildMix()
+        }
         guard !mix.isEmpty else { return }
-        queue.start(mix.map(\.track), mood: mood)
+        mixEndTrackID = mix.last?.track.id
+        queue.start(mix.map(\.track), mood: queueMood)
         await sendQueue(positionMs: 0)
+    }
+
+    /// Journey mode: tapping a mood adds it to the route (up to 4), tapping it again removes it.
+    public func toggleJourneyMood(_ mood: Mood) {
+        if let i = journey.firstIndex(of: mood) {
+            journey.remove(at: i)
+        } else if journey.count < 4 {
+            journey.append(mood)
+        }
+    }
+
+    public func clearJourney() { journey = [] }
+
+    // MARK: Mood from the moment
+
+    public func updateSuggestion() {
+        let context = momentProvider?() ?? MomentContext()
+        let next = MoodSuggester.suggest(for: context, history: moodHistory)
+        if next.mood != suggestion?.mood || next.reason != suggestion?.reason { suggestion = next }
+    }
+
+    private var moodHistory: [MoodPick] {
+        guard let data = UserDefaults.standard.data(forKey: "mood.history") else { return [] }
+        return (try? JSONDecoder().decode([MoodPick].self, from: data)) ?? []
+    }
+
+    private func rememberPick(_ mood: Mood) {
+        let history = (moodHistory + [MoodPick(date: Date(), mood: mood)]).suffix(300)
+        UserDefaults.standard.set(try? JSONEncoder().encode(Array(history)), forKey: "mood.history")
+    }
+
+    // MARK: Your corrections
+
+    /// "This song is more <mood>": puts that mood first for the song and keeps analysis from changing it.
+    public func retag(_ trackID: String, as mood: Mood) {
+        var profile = profiles[trackID] ?? TrackProfile()
+        profile.moods = [mood] + profile.moods.filter { $0 != mood }
+        profile.userTagged = true
+        var feedback = profile.feedback ?? [:]
+        feedback[mood.rawValue] = max(feedback[mood.rawValue] ?? 0, 0)
+        profile.feedback = feedback
+        Task { await save([trackID: profile]) }
+        ActivityLog.write("retagged \(trackID) as \(mood.rawValue)")
+    }
+
+    // MARK: Sleep timer
+
+    public enum SleepOption: Hashable, Sendable {
+        case off, endOfSong, endOfMix, minutes(Int)
+    }
+
+    public func setSleepTimer(_ option: SleepOption) {
+        sleepTask?.cancel()
+        switch option {
+        case .off:
+            sleepTimer = .off
+        case .endOfSong:
+            guard let id = nowPlaying?.track.id else { return }
+            sleepTimer = .endOfSong(trackID: id)
+        case .endOfMix:
+            guard let id = mixEndTrackID ?? queue.upcoming.last?.track.id ?? nowPlaying?.track.id else { return }
+            sleepTimer = .endOfMix(trackID: id)
+        case .minutes(let m):
+            sleepTimer = .at(Date().addingTimeInterval(TimeInterval(m * 60)))
+        }
+        guard sleepTimer.isOn else { return }
+        ActivityLog.write("sleep timer: \(sleepTimer)")
+        sleepTask = Task { await runSleepTimer() }
+    }
+
+    /// Text for the widget, e.g. "Stops in 23 min".
+    public var sleepTimerText: String? {
+        switch sleepTimer {
+        case .off: return nil
+        case .endOfSong: return "Stops after this song"
+        case .endOfMix: return "Stops at the end of the mix"
+        case .at(let date):
+            let minutes = Int((date.timeIntervalSinceNow / 60).rounded(.up))
+            return minutes <= 1 ? "Stopping in under a minute" : "Stops in \(minutes) min"
+        }
+    }
+
+    private func runSleepTimer() async {
+        while !Task.isCancelled, sleepTimer.isOn {
+            try? await Task.sleep(for: .seconds(1))
+            guard let np = nowPlaying else { continue }
+            switch sleepTimer {
+            case .off:
+                return
+            case .endOfSong(let id), .endOfMix(let id):
+                if np.track.id != id {
+                    // Already past it (a skip, or the 5 s poll missed the end).
+                    if case .endOfSong = sleepTimer { await sleepNow(fade: false); return }
+                    continue
+                }
+                let remaining = np.track.durationMs - np.progress(at: Date())
+                if np.isPlaying && remaining < 1_200 {
+                    try? await Task.sleep(for: .milliseconds(max(remaining - 300, 0)))
+                    await sleepNow(fade: false)
+                    return
+                }
+            case .at(let date):
+                if date.timeIntervalSinceNow <= 20 {
+                    await sleepNow(fade: true)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Pauses, optionally fading the volume down over ~20 s first (and restoring it after).
+    private func sleepNow(fade: Bool) async {
+        let api = self.api
+        let original = (try? await api.currentPlayback())?.volumePercent ?? nowPlaying?.volumePercent
+        if fade, let original, original > 0 {
+            for step in stride(from: 9, through: 0, by: -1) {
+                guard sleepTimer.isOn else { return }
+                try? await api.setVolume(original * step / 10)
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        try? await api.pause()
+        if fade, let original { try? await api.setVolume(original) }
+        ActivityLog.write("sleep timer: paused")
+        sleepTimer = .off
+        await refreshPlayback()
     }
 
     /// Takes the mood of the song playing now and lines up matching songs from the playlist after it,
@@ -374,7 +532,7 @@ public final class AppModel {
     }
 
     /// Keeps the queue in step with Spotify and topped up with songs in its mood.
-    private func followQueue() async {
+    private func followQueue(previous: NowPlaying? = nil) async {
         guard queueActive, let np = nowPlaying else { return }
         // You started a playlist/album in Spotify yourself: hands off, even if its songs are also in the queue.
         if let context = np.contextURI {
@@ -384,10 +542,16 @@ public final class AppModel {
             ActivityLog.write("Spotify is playing \(context); MoodMix stepped back")
             return
         }
+        let leaving = queue.current
+        let upcomingIDs = Set(queue.upcoming.map(\.track.id))
         guard queue.follow(playingTrackID: np.track.id) else {
             queueActive = false  // you started something else in Spotify
             ActivityLog.write("Spotify is playing \(np.track.name), not in the queue; MoodMix stepped back")
             return
+        }
+        // Moved forward through the queue: learn from how the previous song went.
+        if leaving?.track.id != np.track.id, upcomingIDs.contains(np.track.id) {
+            learnFromTransition(previous: previous, leaving: leaving)
         }
         if queue.needsMore, let mood = queue.mood {
             let used = queue.trackIDs
@@ -450,6 +614,7 @@ public final class AppModel {
         var tick = 0
         while !Task.isCancelled {
             rateLimitedUntil = await RateLimit.shared.blockedUntil
+            if tick % 12 == 0 { updateSuggestion() }
             if isLoggedIn, rateLimitedUntil == nil {
                 await refreshPlayback()
                 let libraryMissing = playlists.isEmpty || (selectedPlaylistID != nil && tracks.isEmpty)
@@ -466,8 +631,21 @@ public final class AppModel {
 
     private func refreshPlayback() async {
         guard isLoggedIn, let state = try? await api.currentPlayback() else { return }
+        let previous = nowPlaying
         nowPlaying = state
-        await followQueue()
+        await followQueue(previous: previous)
+    }
+
+    /// When the queue moves on, how far the last song got tells us whether it fit the mood.
+    private func learnFromTransition(previous: NowPlaying?, leaving item: QueueItem?) {
+        guard let item, !item.addedByYou, let mood = queue.mood,
+              let previous, previous.track.id == item.track.id,
+              let outcome = ListeningOutcome.judge(playedMs: previous.progress(at: Date()), durationMs: item.track.durationMs)
+        else { return }
+        var profile = profiles[item.track.id] ?? TrackProfile()
+        profile.learn(outcome, mood: mood)
+        Task { await save([item.track.id: profile]) }
+        ActivityLog.write("\(outcome == .skipped ? "skipped" : "finished") \(item.track.name) (\(mood.rawValue))")
     }
 
     private func control(_ action: @escaping (SpotifyAPI) async throws -> Void) async {
