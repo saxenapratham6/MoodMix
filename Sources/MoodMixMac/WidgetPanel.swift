@@ -33,14 +33,15 @@ final class WidgetController {
     private(set) var bubbleSide: Side = .right
     /// The card's measured height; the window and the card's slide distance follow it.
     private(set) var cardHeight: CGFloat
-    /// Hovering the bubble widens the window, then slides out a pill with playback controls.
-    private(set) var bubbleWide = false
+    /// Hovering the record fades in a pill with playback controls. The window always has room for it,
+    /// so nothing resizes (and the record never moves) when it comes and goes.
     private(set) var pillVisible = false
     /// The playback pill sits under the record, or above it when the record is near the bottom of the screen.
     private(set) var pillAbove = false
 
     @ObservationIgnored let panel: WidgetPanel
     @ObservationIgnored private var hoverTask: Task<Void, Never>?
+    @ObservationIgnored private var pointerTimer: Timer?
     @ObservationIgnored private var barOrigin: NSPoint?
     @ObservationIgnored private var bubbleCenterY: CGFloat
     @ObservationIgnored private let defaults = UserDefaults.standard
@@ -79,6 +80,9 @@ final class WidgetController {
         panel.contentView = container
 
         layout(animate: false)
+        pointerTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackPointer() }
+        }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.layout(animate: false) }
         }
@@ -136,37 +140,55 @@ final class WidgetController {
         save()
     }
 
-    /// Mouse entered or left the bubble (and its pill).
+    /// Mouse entered or left the record (and its pill).
     func setBubbleHover(_ inside: Bool) {
         guard mode == .bubble else { return }
-        hoverTask?.cancel()
         if inside {
-            guard !bubbleWide else {
-                if !pillVisible { withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { pillVisible = true } }
-                return
-            }
-            bubbleWide = true
-            layout(animate: false)
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { pillVisible = true }
-        } else {
+            hoverTask?.cancel()
+            hoverTask = nil
+            if !pillVisible { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { pillVisible = true } }
+        } else if pillVisible, hoverTask == nil {
             hoverTask = Task {
                 try? await Task.sleep(for: .milliseconds(450))
-                guard !Task.isCancelled, mode == .bubble else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                    pillVisible = false
-                } completion: {
-                    guard !self.pillVisible else { return }
-                    self.bubbleWide = false
-                    self.layout(animate: false)
-                }
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.22)) { pillVisible = false }
+                hoverTask = nil
             }
         }
     }
 
     private func resetBubbleHover() {
         hoverTask?.cancel()
+        hoverTask = nil
         pillVisible = false
-        bubbleWide = false
+    }
+
+    /// In bubble mode the window is bigger than the record, so follow the pointer ourselves: hover shows the
+    /// pill, and the empty part of the window lets clicks through to whatever is underneath.
+    private func trackPointer() {
+        guard mode == .bubble else {
+            if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
+            return
+        }
+        let mouse = NSEvent.mouseLocation
+        let record = recordRect.insetBy(dx: -4, dy: -4)
+        let zone = pillVisible ? record.union(pillRect).insetBy(dx: -6, dy: -6) : record
+        let inside = zone.contains(mouse)
+        if panel.ignoresMouseEvents == inside { panel.ignoresMouseEvents = !inside }
+        setBubbleHover(inside)
+    }
+
+    /// Where the record and the pill are on screen, inside the bubble-mode window.
+    private var recordRect: NSRect {
+        let inner = panel.frame.insetBy(dx: Self.pad, dy: Self.pad)
+        let d = Self.bubbleDiameter
+        return NSRect(x: inner.midX - d / 2, y: pillAbove ? inner.minY : inner.maxY - d, width: d, height: d)
+    }
+
+    private var pillRect: NSRect {
+        let inner = panel.frame.insetBy(dx: Self.pad, dy: Self.pad)
+        return NSRect(x: inner.midX - Self.pillWidth / 2, y: pillAbove ? inner.maxY - Self.pillHeight : inner.minY,
+                      width: Self.pillWidth, height: Self.pillHeight)
     }
 
     /// Puts the widget back at the bottom center.
@@ -187,10 +209,7 @@ final class WidgetController {
 
         switch mode {
         case .bubble:
-            let d = Self.bubbleDiameter
-            let bubble = NSRect(x: inner.midX - d / 2,
-                                y: bubbleWide && !pillAbove ? inner.maxY - d : inner.minY,
-                                width: d, height: d)
+            let bubble = recordRect
             resetBubbleHover()
             let nearLeft = bubble.midX - visible.minX < 140
             let nearRight = visible.maxX - bubble.midX < 140
@@ -257,17 +276,15 @@ final class WidgetController {
             let x = bubbleSide == .left ? visible.minX + Self.bubbleInset : visible.maxX - d - Self.bubbleInset
             let y = min(max(bubbleCenterY - d / 2, visible.minY + 8), visible.maxY - d - 8)
             var rect = NSRect(x: x, y: y, width: d, height: d)
-            if bubbleWide {
-                // Grow toward the pill without moving the record: down (or up near the bottom of the
-                // screen) and inward from the screen edge.
-                let extraHeight = Self.pillHeight + Self.pillGap
-                pillAbove = rect.minY - extraHeight < visible.minY + 8
-                if !pillAbove { rect.origin.y -= extraHeight }
-                rect.size.height += extraHeight
-                if Self.pillWidth > d {
-                    rect.origin.x -= (Self.pillWidth - d) / 2  // pill centered under the record
-                    rect.size.width = Self.pillWidth
-                }
+            // Always leave room for the pill under the record (above it near the bottom of the screen),
+            // centered, so hovering never resizes the window.
+            let extraHeight = Self.pillHeight + Self.pillGap
+            pillAbove = rect.minY - extraHeight < visible.minY + 8
+            if !pillAbove { rect.origin.y -= extraHeight }
+            rect.size.height += extraHeight
+            if Self.pillWidth > d {
+                rect.origin.x -= (Self.pillWidth - d) / 2
+                rect.size.width = Self.pillWidth
             }
             return rect.insetBy(dx: -Self.pad, dy: -Self.pad)
         case .bar:

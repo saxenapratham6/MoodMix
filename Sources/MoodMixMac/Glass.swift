@@ -147,33 +147,6 @@ struct DragHandle: NSViewRepresentable {
     }
 }
 
-/// Reports the mouse entering and leaving, even when MoodMix isn't the active app. Never takes clicks.
-struct HoverTracker: NSViewRepresentable {
-    var onChange: (Bool) -> Void
-
-    func makeNSView(context: Context) -> TrackerView {
-        let view = TrackerView()
-        view.onChange = onChange
-        return view
-    }
-
-    func updateNSView(_ view: TrackerView, context: Context) { view.onChange = onChange }
-
-    final class TrackerView: NSView {
-        var onChange: ((Bool) -> Void)?
-
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
-        }
-
-        override func mouseEntered(with event: NSEvent) { onChange?(true) }
-        override func mouseExited(with event: NSEvent) { onChange?(false) }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    }
-}
-
 /// The current song's album-art color, used to tint the glass like Spotify's player.
 @MainActor @Observable
 final class ArtworkPalette {

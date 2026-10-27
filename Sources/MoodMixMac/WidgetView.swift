@@ -81,16 +81,20 @@ struct WidgetView: View {
         VStack(spacing: WidgetController.pillGap) {
             if controller.pillAbove { pill }
             // The record never moves or resizes when the pill comes and goes.
-            Bubble(accent: accent).transaction { $0.animation = nil }
+            Bubble(accent: accent)
+                .zIndex(1)
+                .transaction { $0.animation = nil }
             if !controller.pillAbove { pill }
         }
-        .background { HoverTracker { controller.setBubbleHover($0) } }
     }
 
     @ViewBuilder private var pill: some View {
         if controller.pillVisible {
+            let anchor: UnitPoint = controller.pillAbove ? .bottom : .top
             BubblePill()
-                .transition(.move(edge: controller.pillAbove ? .bottom : .top).combined(with: .opacity))
+                .transition(.opacity
+                    .combined(with: .scale(scale: 0.85, anchor: anchor))
+                    .combined(with: .offset(y: controller.pillAbove ? 8 : -8)))
         }
     }
 }
