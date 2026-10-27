@@ -44,6 +44,7 @@ public final class AppModel {
     public private(set) var queue = PlayQueue()
     public private(set) var queueActive = false
     @ObservationIgnored private var resendTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingResend = false
 
     /// When Spotify's quota resets, while MoodMix is backing off.
     public private(set) var rateLimitedUntil: Date?
@@ -322,7 +323,7 @@ public final class AppModel {
 
     /// Picks the queue back up after you played something else in Spotify.
     public func resumeQueue() async {
-        await sendQueue(positionMs: 0)
+        await sendQueue(positionMs: 0, reason: "resume queue")
     }
 
     /// Songs in the playlist matching a search, for adding to the queue.
@@ -343,7 +344,13 @@ public final class AppModel {
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled else { return }
             resendTask = nil
-            await sendQueue(positionMs: currentProgress)
+            // Sending the queue starts playback, so never do it behind a paused player's back.
+            guard nowPlaying?.isPlaying == true else {
+                pendingResend = true
+                ActivityLog.write("queue edited while paused; will send when playback resumes")
+                return
+            }
+            await sendQueue(positionMs: currentProgress, reason: "queue edited")
         }
     }
 
@@ -352,9 +359,11 @@ public final class AppModel {
         return np.progress(at: Date()) + 250  // allow for request latency
     }
 
-    private func sendQueue(positionMs: Int) async {
+    private func sendQueue(positionMs: Int, reason: String = "start") async {
         guard !queue.isEmpty else { return }
         let uris = queue.uris
+        pendingResend = false
+        ActivityLog.write("play \(uris.count) songs from \(queue.current?.track.name ?? "?") at \(positionMs / 1000)s (\(reason))")
         await run(queueActive ? nil : "Starting playback…") {
             await self.beforePlayback?()
             try await self.api.play(uris: uris, positionMs: positionMs)
@@ -367,8 +376,17 @@ public final class AppModel {
     /// Keeps the queue in step with Spotify and topped up with songs in its mood.
     private func followQueue() async {
         guard queueActive, let np = nowPlaying else { return }
+        // You started a playlist/album in Spotify yourself: hands off, even if its songs are also in the queue.
+        if let context = np.contextURI {
+            queueActive = false
+            resendTask?.cancel()
+            resendTask = nil
+            ActivityLog.write("Spotify is playing \(context); MoodMix stepped back")
+            return
+        }
         guard queue.follow(playingTrackID: np.track.id) else {
             queueActive = false  // you started something else in Spotify
+            ActivityLog.write("Spotify is playing \(np.track.name), not in the queue; MoodMix stepped back")
             return
         }
         if queue.needsMore, let mood = queue.mood {
@@ -385,9 +403,13 @@ public final class AppModel {
             }
             queue.extend(with: Array(more.prefix(12)))
         }
-        // Spotify is on the last song it was given: hand it the rest while this one is still early.
-        if queue.needsResend, resendTask == nil {
-            await sendQueue(positionMs: currentProgress)
+        // Only touch playback while it's playing; sending the queue would otherwise un-pause it.
+        guard np.isPlaying, resendTask == nil else { return }
+        if pendingResend {
+            await sendQueue(positionMs: currentProgress, reason: "edits made while paused")
+        } else if queue.needsResend {
+            // Spotify is on the last song it was given: hand it the rest while this one is still early.
+            await sendQueue(positionMs: currentProgress, reason: "topping up the queue")
         }
     }
 
@@ -396,12 +418,20 @@ public final class AppModel {
     public func togglePlayPause() async {
         await control { api in
             let playing = (try? await api.currentPlayback())?.isPlaying ?? self.nowPlaying?.isPlaying ?? false
+            ActivityLog.write(playing ? "pause (button)" : "resume (button)")
             playing ? try await api.pause() : try await api.resume()
         }
     }
 
-    public func skipNext() async { await control { try await $0.next() } }
-    public func skipPrevious() async { await control { try await $0.previous() } }
+    public func skipNext() async {
+        ActivityLog.write("next (button)")
+        await control { try await $0.next() }
+    }
+
+    public func skipPrevious() async {
+        ActivityLog.write("previous (button)")
+        await control { try await $0.previous() }
+    }
 
     public func dismissError() { errorMessage = nil }
 

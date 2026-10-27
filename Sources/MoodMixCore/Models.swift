@@ -37,6 +37,9 @@ public struct NowPlaying: Hashable, Sendable {
     public let isPlaying: Bool
     public let progressMs: Int
     public let fetchedAt: Date
+    /// The playlist/album/artist Spotify is playing from. MoodMix plays a plain list of songs,
+    /// which has no context, so a non-nil value means you started this yourself in Spotify.
+    public var contextURI: String? = nil
 
     /// Progress extrapolated from the last poll, so the bar moves smoothly.
     public func progress(at date: Date) -> Int {

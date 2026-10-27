@@ -102,10 +102,17 @@ public struct SpotifyAPI: Sendable {
 
     /// What's playing on any of your devices right now, or nil.
     public func currentPlayback() async throws -> NowPlaying? {
-        struct R: Decodable { let is_playing: Bool; let progress_ms: Int?; let item: TrackObject? }
+        struct R: Decodable {
+            struct Context: Decodable { let uri: String? }
+            let is_playing: Bool
+            let progress_ms: Int?
+            let item: TrackObject?
+            let context: Context?
+        }
         let data = try await send("GET", endpoint("me/player"))
         guard !data.isEmpty, let r = try? JSONDecoder().decode(R.self, from: data), let track = r.item?.asTrack() else { return nil }
-        return NowPlaying(track: track, isPlaying: r.is_playing, progressMs: r.progress_ms ?? 0, fetchedAt: Date())
+        return NowPlaying(track: track, isPlaying: r.is_playing, progressMs: r.progress_ms ?? 0, fetchedAt: Date(),
+                          contextURI: r.context?.uri)
     }
 
     public func pause() async throws { try await send("PUT", endpoint("me/player/pause")) }

@@ -87,3 +87,28 @@ public actor LibraryCache {
         if let data = try? JSONEncoder().encode(snapshot) { try? data.write(to: url, options: .atomic) }
     }
 }
+
+/// A plain-text record of the playback commands MoodMix sends, in ~/Library/Logs/MoodMix.log,
+/// so surprises ("why did it pause?") can be traced afterwards.
+public enum ActivityLog {
+    static let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Logs/MoodMix.log")
+    private static let queue = DispatchQueue(label: "MoodMix.ActivityLog")
+
+    public static func write(_ message: String) {
+        let line = "\(Date().formatted(.iso8601)) \(message)\n"
+        queue.async {
+            // Keep it small: start over past 1 MB.
+            if let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int, size > 1_000_000 {
+                try? FileManager.default.removeItem(at: url)
+            }
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(Data(line.utf8))
+                try? handle.close()
+            } else {
+                try? Data(line.utf8).write(to: url)
+            }
+        }
+    }
+}
