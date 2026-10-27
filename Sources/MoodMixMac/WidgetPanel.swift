@@ -19,8 +19,10 @@ final class WidgetController {
     static let barSize = NSSize(width: 580, height: 64)
     static let bubbleDiameter: CGFloat = 88
     static let gap: CGFloat = 10
-    static let pillWidth: CGFloat = 140
-    static let pillHeight: CGFloat = 52
+    static let pillWidth: CGFloat = 112
+    static let pillHeight: CGFloat = 44
+    /// Gap between the record and the screen edge; leaves room to center the pill under it.
+    static let bubbleInset: CGFloat = 20
     static let pillGap: CGFloat = 8
 
     private(set) var mode: Mode = .bar
@@ -186,7 +188,7 @@ final class WidgetController {
         switch mode {
         case .bubble:
             let d = Self.bubbleDiameter
-            let bubble = NSRect(x: bubbleSide == .right ? inner.maxX - d : inner.minX,
+            let bubble = NSRect(x: inner.midX - d / 2,
                                 y: bubbleWide && !pillAbove ? inner.maxY - d : inner.minY,
                                 width: d, height: d)
             resetBubbleHover()
@@ -252,7 +254,7 @@ final class WidgetController {
         switch mode {
         case .bubble:
             let d = Self.bubbleDiameter
-            let x = bubbleSide == .left ? visible.minX + 8 : visible.maxX - d - 8
+            let x = bubbleSide == .left ? visible.minX + Self.bubbleInset : visible.maxX - d - Self.bubbleInset
             let y = min(max(bubbleCenterY - d / 2, visible.minY + 8), visible.maxY - d - 8)
             var rect = NSRect(x: x, y: y, width: d, height: d)
             if bubbleWide {
@@ -263,7 +265,7 @@ final class WidgetController {
                 if !pillAbove { rect.origin.y -= extraHeight }
                 rect.size.height += extraHeight
                 if Self.pillWidth > d {
-                    if bubbleSide == .right { rect.origin.x -= Self.pillWidth - d }
+                    rect.origin.x -= (Self.pillWidth - d) / 2  // pill centered under the record
                     rect.size.width = Self.pillWidth
                 }
             }

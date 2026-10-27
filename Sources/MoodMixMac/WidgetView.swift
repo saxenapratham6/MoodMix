@@ -47,13 +47,7 @@ struct WidgetView: View {
 
     private var rootAlignment: Alignment {
         switch controller.mode {
-        case .bubble:
-            switch (controller.bubbleSide, controller.pillAbove) {
-            case (.right, false): .topTrailing
-            case (.right, true): .bottomTrailing
-            case (.left, false): .topLeading
-            case (.left, true): .bottomLeading
-            }
+        case .bubble: controller.pillAbove ? .bottom : .top
         default: controller.cardBelow ? .top : .bottom
         }
     }
@@ -84,8 +78,7 @@ struct WidgetView: View {
     }
 
     private func bubbleWithPill(_ accent: Color) -> some View {
-        let right = controller.bubbleSide == .right
-        return VStack(alignment: right ? .trailing : .leading, spacing: WidgetController.pillGap) {
+        VStack(spacing: WidgetController.pillGap) {
             if controller.pillAbove { pill }
             // The record never moves or resizes when the pill comes and goes.
             Bubble(accent: accent).transaction { $0.animation = nil }
@@ -218,26 +211,27 @@ private struct ProgressLine: View {
 }
 
 struct Transport: View {
-    enum Size { case regular, large }
+    enum Size { case compact, regular, large }
     @Environment(AppModel.self) private var model
     var size: Size = .regular
 
     var body: some View {
         let big = size == .large
-        HStack(spacing: big ? 22 : 14) {
+        let compact = size == .compact
+        HStack(spacing: big ? 22 : compact ? 10 : 14) {
             Button { Task { await model.skipPrevious() } } label: { Image(systemName: "backward.fill") }
             Button { Task { await model.togglePlayPause() } } label: {
                 Image(systemName: model.nowPlaying?.isPlaying == true ? "pause.fill" : "play.fill")
                     .contentTransition(.symbolEffect(.replace))
-                    .font(.system(size: big ? 17 : 14))
+                    .font(.system(size: big ? 17 : compact ? 12 : 14))
                     .foregroundStyle(.black)
-                    .frame(width: big ? 40 : 32, height: big ? 40 : 32)
+                    .frame(width: big ? 40 : compact ? 28 : 32, height: big ? 40 : compact ? 28 : 32)
                     .background(.white, in: .circle)
             }
             Button { Task { await model.skipNext() } } label: { Image(systemName: "forward.fill") }
         }
         .buttonStyle(.pressable)
-        .font(.system(size: big ? 16 : 13))
+        .font(.system(size: big ? 16 : compact ? 11 : 13))
         .foregroundStyle(.white.opacity(0.85))
         .disabled(model.nowPlaying == nil)
     }
@@ -334,7 +328,7 @@ private struct Bubble: View {
 /// Slides out of the bubble on hover so you can control playback without opening the bar.
 private struct BubblePill: View {
     var body: some View {
-        Transport(size: .regular)
+        Transport(size: .compact)
             .frame(width: WidgetController.pillWidth, height: WidgetController.pillHeight)
             .liquidGlass(tint: Color.black.opacity(0.35), in: Capsule())
             .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
