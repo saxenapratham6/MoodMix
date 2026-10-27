@@ -1,4 +1,5 @@
 import MoodMixCore
+import ImageIO
 import SwiftUI
 
 enum Theme {
@@ -26,22 +27,61 @@ extension Mood {
     }
 }
 
+/// Album covers, downloaded once and shrunk to display size, so scrolling lists don't refetch them.
+@MainActor
+final class ArtworkCache {
+    static let shared = ArtworkCache()
+    private let images = NSCache<NSURL, NSImage>()
+    private var loading: [URL: Task<NSImage?, Never>] = [:]
+
+    private init() { images.countLimit = 800 }
+
+    func cached(_ url: URL) -> NSImage? { images.object(forKey: url as NSURL) }
+
+    func load(_ url: URL) async -> NSImage? {
+        if let image = cached(url) { return image }
+        if let task = loading[url] { return await task.value }
+        let task = Task.detached(priority: .utility) { () -> NSImage? in
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                      kCGImageSourceCreateThumbnailFromImageAlways: true,
+                      kCGImageSourceCreateThumbnailWithTransform: true,
+                      kCGImageSourceThumbnailMaxPixelSize: 300,
+                  ] as CFDictionary) else { return nil }
+            return NSImage(cgImage: thumb, size: .zero)
+        }
+        loading[url] = task
+        let image = await task.value
+        loading[url] = nil
+        if let image { images.setObject(image, forKey: url as NSURL) }
+        return image
+    }
+}
+
 struct Artwork: View {
     let url: URL?
     var size: CGFloat
     var radius: CGFloat = 4
+    @State private var loaded: NSImage?
 
     var body: some View {
-        AsyncImage(url: url) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            ZStack {
+        // Read the cache synchronously so rows scrolling back into view show their cover immediately.
+        let image = url.flatMap { ArtworkCache.shared.cached($0) } ?? loaded
+        ZStack {
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.medium).scaledToFill()
+            } else {
                 Theme.elevated
                 Image(systemName: "music.note").foregroundStyle(Theme.subtext)
             }
         }
         .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: radius))
+        .task(id: url) {
+            guard let url else { loaded = nil; return }
+            loaded = await ArtworkCache.shared.load(url)
+        }
     }
 }
 

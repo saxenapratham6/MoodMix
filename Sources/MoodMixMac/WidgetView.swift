@@ -1,6 +1,7 @@
 import AppKit
 import MoodMixCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The floating widget: a glass bar that grows a card out of itself, or shrinks into a bubble on a screen edge.
 struct WidgetView: View {
@@ -589,6 +590,8 @@ private struct Controls: View {
 private struct QueueView: View {
     @Environment(AppModel.self) private var model
     @State private var search = ""
+    @State private var dragging: UUID?
+    @State private var dropTarget: UUID?
 
     var body: some View {
         let rowHeight: CGFloat = 46
@@ -626,20 +629,41 @@ private struct QueueView: View {
                             .help("When the queue runs low, MoodMix adds more \(mood.title.lowercased()) songs from this playlist.")
                     }
                 }
-                List {
-                    ForEach(model.queue.upcoming) { item in
-                        QueueRow(item: item, isCurrent: false)
-                            .frame(height: rowHeight - 2)
-                            .listRowInsets(EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                let visibleRows = min(max(model.queue.upcoming.count, 1), 7)
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(model.queue.upcoming) { item in
+                            QueueRow(item: item, isCurrent: false)
+                                .frame(height: rowHeight - 2)
+                                .overlay(alignment: .top) {
+                                    if dropTarget == item.id {
+                                        Capsule().fill(Theme.green).frame(height: 2).offset(y: -2)
+                                    }
+                                }
+                                .onDrag {
+                                    dragging = item.id
+                                    return NSItemProvider(object: item.id.uuidString as NSString)
+                                }
+                                .onDrop(of: [.text], delegate: QueueDrop(target: item.id, model: model, dragging: $dragging, dropTarget: $dropTarget))
+                        }
+                        // Drop here to move a song to the very end.
+                        Color.clear
+                            .frame(height: 14)
+                            .overlay(alignment: .top) {
+                                if dropTarget == QueueDrop.endID { Capsule().fill(Theme.green).frame(height: 2) }
+                            }
+                            .onDrop(of: [.text], delegate: QueueDrop(target: QueueDrop.endID, model: model, dragging: $dragging, dropTarget: $dropTarget))
                     }
-                    .onMove { model.moveInQueue(fromOffsets: $0, toOffset: $1) }
+                    .padding(.vertical, 4)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .scrollIndicators(.never)
-                .frame(height: CGFloat(min(max(model.queue.upcoming.count, 1), 6)) * rowHeight)
+                .scrollIndicators(.automatic)
+                .frame(height: CGFloat(visibleRows) * rowHeight + 18)
+                .mask {
+                    // Soft edges hint that there's more to scroll.
+                    LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.03),
+                                           .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
                 .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.queue.upcoming.map(\.id))
             }
             AddSongField(search: $search)
@@ -648,6 +672,34 @@ private struct QueueView: View {
 
     private func section(_ title: String) -> some View {
         Text(title.uppercased()).font(.caption2.weight(.heavy)).foregroundStyle(.white.opacity(0.6))
+    }
+}
+
+/// Drag a queued song onto another to put it in that spot (a green line shows where it lands).
+private struct QueueDrop: DropDelegate {
+    static let endID = UUID()
+    let target: UUID
+    let model: AppModel
+    @Binding var dragging: UUID?
+    @Binding var dropTarget: UUID?
+
+    func dropEntered(info: DropInfo) { dropTarget = target }
+    func dropExited(info: DropInfo) { if dropTarget == target { dropTarget = nil } }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer {
+            dragging = nil
+            dropTarget = nil
+        }
+        let upcoming = model.queue.upcoming
+        guard let dragging, dragging != target, let from = upcoming.firstIndex(where: { $0.id == dragging }) else { return false }
+        let to = target == Self.endID ? upcoming.count : upcoming.firstIndex(where: { $0.id == target })
+        guard let to else { return false }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            model.moveInQueue(fromOffsets: IndexSet(integer: from), toOffset: to)
+        }
+        return true
     }
 }
 
@@ -694,7 +746,6 @@ private struct QueueRow: View {
         .contentShape(.rect)
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { if !isCurrent { Task { await model.jumpInQueue(to: item.id) } } }
-        .help(isCurrent ? "Playing now" : "Double-click to play · drag to reorder")
     }
 }
 
