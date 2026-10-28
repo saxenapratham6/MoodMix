@@ -122,6 +122,31 @@ public struct SpotifyAPI: Sendable {
         }
     }
 
+    // MARK: Discovering
+
+    /// One track's full details (cover art included).
+    public func track(id: String) async throws -> Track? {
+        let object: TrackObject = try await get(endpoint("tracks/\(id)"))
+        return object.asTrack()
+    }
+
+    /// Spotify search for songs (Spotify returns at most 10 per page).
+    public func searchTracks(_ query: String) async throws -> [Track] {
+        struct R: Decodable { struct Page: Decodable { let items: [TrackObject] }; let tracks: Page }
+        let r: R = try await get(endpoint("search", ["q": query, "type": "track", "limit": "10"]))
+        return r.tracks.items.compactMap { $0.asTrack() }
+    }
+
+    public struct Profile: Decodable, Sendable {
+        public let display_name: String?
+        public let images: [Image]?
+        public struct Image: Decodable, Sendable { public let url: String }
+    }
+
+    public func me() async throws -> Profile {
+        try await get(endpoint("me"))
+    }
+
     /// Changes whenever the playlist is edited, so it's a cheap way to detect added songs.
     public func playlistSnapshot(_ id: String) async throws -> String? {
         struct R: Decodable { let snapshot_id: String? }

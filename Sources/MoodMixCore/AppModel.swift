@@ -43,6 +43,20 @@ public final class AppModel {
     public var favoriteWeight = 0.4
     public private(set) var mix: [MixEntry] = []
 
+    // Discover
+    public private(set) var deck: [DiscoveryCard] = []
+    public private(set) var discoverStats = DiscoveryStats()
+    public var discoverSeed: DiscoverSeed = .favorites
+    public var discoverTarget: DiscoverTarget = .queue {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(discoverTarget), forKey: "discover.target") }
+    }
+    public private(set) var loadingDeck = false
+    /// The card whose song is playing as a preview, if any.
+    public private(set) var previewingID: String?
+    public private(set) var profileName: String?
+    public private(set) var profileImageURL: URL?
+    @ObservationIgnored private var beforePreview: NowPlaying?
+
     /// Journey mode: the mix travels through `journey`'s moods in order.
     public var journeyMode = false
     public private(set) var journey: [Mood] = []
@@ -101,6 +115,10 @@ public final class AppModel {
         anthropicKey = Keychain.get("anthropic.apiKey") ?? ""
         claudeModel = UserDefaults.standard.string(forKey: "claude.model") ?? ClaudeTagger.defaultModel
         autoMood = UserDefaults.standard.bool(forKey: "mood.auto")
+        if let data = UserDefaults.standard.data(forKey: "discover.stats"),
+           let stats = try? JSONDecoder().decode(DiscoveryStats.self, from: data) { discoverStats = stats }
+        if let data = UserDefaults.standard.data(forKey: "discover.target"),
+           let target = try? JSONDecoder().decode(DiscoverTarget.self, from: data) { discoverTarget = target }
         selectedPlaylistID = UserDefaults.standard.string(forKey: "playlist.id")
         auth = SpotifyAuth(clientID: UserDefaults.standard.string(forKey: "spotify.clientID") ?? "")
         Task {
@@ -430,6 +448,174 @@ public final class AppModel {
         return result
     }
 
+    // MARK: Discover
+
+    /// Adds new suggestions to the deck: songs similar to the chosen starting point that aren't in
+    /// your playlist and haven't been shown before. ReccoBeats first (free); Claude if that runs dry.
+    public func refillDeck(reset: Bool = false) async {
+        guard !loadingDeck else { return }
+        loadingDeck = true
+        defer { loadingDeck = false }
+        if reset { deck = [] }
+        let seeds = discoverSeeds()
+        guard !seeds.isEmpty else {
+            errorMessage = "Load a playlist first, so Discover has songs to start from."
+            return
+        }
+        let reason = "Like " + seeds.prefix(2).map(\.name).joined(separator: " and ")
+        var known = Set(tracks.map(\.id)).union(discoverStats.seen).union(deck.map(\.id))
+
+        let recco = ReccoBeatsClient()
+        var recs: [ReccoBeatsClient.Recommendation] = []
+        for r in await recco.recommendations(seeds: seeds.map(\.id), size: 30) where !known.contains(r.spotifyID) {
+            recs.append(r)
+            known.insert(r.spotifyID)
+        }
+        let features = await recco.features(for: recs.map(\.spotifyID))
+        var cards = recs.map { r in
+            let f = features[r.spotifyID]
+            return DiscoveryCard(track: Track(id: r.spotifyID, uri: "spotify:track:\(r.spotifyID)", name: r.title, artists: r.artists,
+                                              album: "", durationMs: r.durationMs, addedAt: nil, isrc: r.isrc),
+                                 reason: reason, features: f, mood: f.map(MixBuilder.bestMood), popularity: r.popularity)
+        }
+        if cards.count < 5, !anthropicKey.isEmpty {
+            cards += await claudeSuggestions(seeds: seeds, known: known, reason: reason)
+        }
+        if cards.isEmpty && deck.isEmpty {
+            errorMessage = "No new songs found from \(discoverSeed.title). Try another starting point."
+        }
+        deck += cards
+        await hydrateArtwork()
+    }
+
+    /// Swipe right (add), up (play next) or left (skip).
+    public func swipe(_ card: DiscoveryCard, _ action: SwipeAction) async {
+        deck.removeAll { $0.id == card.id }
+        discoverStats.record(action, card: card)
+        saveDiscoverStats()
+        if previewingID == card.id { await stopPreview() }
+        switch action {
+        case .skip:
+            break
+        case .next:
+            playNext(card.track)
+        case .add:
+            switch discoverTarget {
+            case .queue:
+                addToQueueEnd(card.track)
+            case .playlist(let id, let name):
+                await run(nil) {
+                    try await self.api.appendItems(toPlaylist: id, uris: [card.track.uri])
+                    ActivityLog.write("discover: added \(card.track.name) to \(name)")
+                }
+            }
+        }
+        if action != .skip, let f = card.features {
+            await save([card.id: TrackProfile(features: f, featureSource: .reccobeats)])
+        }
+        await hydrateArtwork()
+        if deck.count < 5 { Task { await refillDeck() } }
+    }
+
+    /// Plays a card's song from about 45 s in (Spotify no longer gives apps 30-second previews).
+    /// Tap again, or swipe it away, to go back to what was playing.
+    public func togglePreview(_ card: DiscoveryCard) async {
+        if previewingID == card.id {
+            await stopPreview()
+            return
+        }
+        if previewingID == nil { beforePreview = nowPlaying }
+        previewingID = card.id
+        lastSentAt = Date()
+        await run(nil) {
+            await self.beforePlayback?()
+            try await self.api.play(uris: [card.track.uri], positionMs: min(45_000, card.track.durationMs / 3))
+        }
+        if errorMessage != nil { previewingID = nil }
+        await refreshPlayback()
+    }
+
+    /// Ends a preview and puts back exactly what was playing (and where), or pauses if nothing was.
+    public func stopPreview() async {
+        guard previewingID != nil else { return }
+        previewingID = nil
+        let before = beforePreview
+        beforePreview = nil
+        lastSentAt = Date()
+        if let before {
+            if let context = before.contextURI {
+                try? await api.play(contextURI: context, offsetURI: before.track.uri, positionMs: before.progressMs)
+            } else {
+                try? await api.play(uris: [before.track.uri], positionMs: before.progressMs)
+            }
+            if !before.isPlaying {
+                try? await Task.sleep(for: .milliseconds(600))
+                try? await api.pause()
+            }
+        } else {
+            try? await api.pause()
+        }
+        await refreshPlayback()
+    }
+
+    /// Your Spotify name and picture, for the Profile tab.
+    public func loadProfile() async {
+        guard isLoggedIn, profileName == nil, let me = try? await api.me() else { return }
+        profileName = me.display_name
+        profileImageURL = me.images?.first.flatMap { URL(string: $0.url) }
+    }
+
+    private func discoverSeeds() -> [Track] {
+        let favoritesSeed = Array(tracks.sorted { favorites.score(for: $0.id) > favorites.score(for: $1.id) }
+            .prefix(30).shuffled().prefix(5))
+        switch discoverSeed {
+        case .favorites:
+            return favoritesSeed
+        case .queue:
+            let queued = [queue.current?.track].compactMap { $0 } + queue.upcoming.map(\.track)
+            return queued.isEmpty ? favoritesSeed : Array(queued.prefix(5))
+        case .mood(let mood):
+            return Array(tracks.sorted { MixBuilder.moodScore(profiles[$0.id], mood: mood) > MixBuilder.moodScore(profiles[$1.id], mood: mood) }
+                .prefix(40).shuffled().prefix(5))
+        case .song(let track):
+            return [track]
+        }
+    }
+
+    private func claudeSuggestions(seeds: [Track], known: Set<String>, reason: String) async -> [DiscoveryCard] {
+        let tagger = ClaudeTagger(apiKey: anthropicKey, model: claudeModel)
+        guard let songs = try? await tagger.similarSongs(to: seeds.map { "\($0.name) — \($0.artistLine)" },
+                                                         avoiding: tracks.prefix(60).map { "\($0.name) — \($0.artistLine)" },
+                                                         count: 8) else { return [] }
+        var cards: [DiscoveryCard] = []
+        for song in songs {
+            guard let track = try? await api.searchTracks("track:\(song.title) artist:\(song.artist)").first,
+                  !known.contains(track.id), !cards.contains(where: { $0.id == track.id }) else { continue }
+            cards.append(DiscoveryCard(track: track, reason: reason + " · picked by Claude", features: nil, mood: nil, popularity: nil))
+        }
+        return cards
+    }
+
+    /// Spotify gives cover art one song at a time, so only fetch it for the next few cards.
+    private func hydrateArtwork() async {
+        for id in deck.prefix(3).filter({ $0.track.artworkURL == nil }).map(\.id) {
+            guard let full = try? await api.track(id: id), let i = deck.firstIndex(where: { $0.id == id }) else { continue }
+            deck[i].track = full
+        }
+    }
+
+    private func saveDiscoverStats() {
+        guard let data = try? JSONEncoder().encode(discoverStats) else { return }
+        UserDefaults.standard.set(data, forKey: "discover.stats")
+        if backsUpLabels { Keychain.setData(data, for: "discover.stats") }
+    }
+
+    /// Songs on Spotify matching a search, for picking a starting point or adding directly.
+    public func searchSpotify(_ query: String) async -> [Track] {
+        guard query.trimmingCharacters(in: .whitespaces).count >= 2 else { return [] }
+        return (try? await api.searchTracks(query)) ?? []
+    }
+
     // MARK: Your corrections
 
     /// "This song is more <mood>": puts that mood first for the song and keeps analysis from changing it.
@@ -728,7 +914,7 @@ public final class AppModel {
 
     /// Keeps the queue in step with Spotify and topped up with songs in its mood.
     private func followQueue(previous: NowPlaying? = nil) async {
-        guard queueActive, let np = nowPlaying else { return }
+        guard queueActive, previewingID == nil, let np = nowPlaying else { return }
         // You started a playlist/album in Spotify yourself: hands off, even if its songs are also in the queue.
         if let context = np.contextURI, context != queuePlaylistURI {
             // Right after MoodMix sends a mix, Spotify can still report the old playlist for a moment.
@@ -904,7 +1090,13 @@ public final class AppModel {
     }
 
     private func restoreLabelBackup() async {
-        guard backsUpLabels, let data = Keychain.getData("labels.backup") else { return }
+        guard backsUpLabels else { return }
+        if discoverStats.explored == 0, let data = Keychain.getData("discover.stats"),
+           let stats = try? JSONDecoder().decode(DiscoveryStats.self, from: data) {
+            discoverStats = stats
+            UserDefaults.standard.set(data, forKey: "discover.stats")
+        }
+        guard let data = Keychain.getData("labels.backup") else { return }
         let restored = await importLabels(data)
         if restored > 0 { ActivityLog.write("restored \(restored) song labels from the Keychain backup") }
     }

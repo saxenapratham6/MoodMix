@@ -11,8 +11,10 @@ struct ContentView: View {
             if model.isLoggedIn {
                 TabView {
                     Tab("Now", systemImage: "waveform") { NowView(showSettings: $showSettings) }
+                    Tab("Discover", systemImage: "rectangle.stack.fill") { DiscoverTab() }
                     Tab("Queue", systemImage: "list.bullet") { QueueTab() }
                     Tab("Insights", systemImage: "chart.bar.xaxis") { InsightsTab() }
+                    Tab("Profile", systemImage: "person.crop.circle") { ProfileTab() }
                 }
                 .tint(Theme.green)
             } else {
@@ -49,7 +51,7 @@ struct ContentView: View {
 // MARK: - Background
 
 /// Spotify-style backdrop: the album cover blown up and blurred, fading to black.
-private struct ArtBackdrop: View {
+struct ArtBackdrop: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -364,7 +366,7 @@ private struct QueueTab: View {
     }
 }
 
-private struct SongRow: View {
+struct SongRow: View {
     @Environment(AppModel.self) private var model
     let track: Track
     var highlight = false

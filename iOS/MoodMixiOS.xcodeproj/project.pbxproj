@@ -14,6 +14,7 @@
 		4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C12751E6F4C38401B99B672 /* Theme.swift */; };
 		5BAA4238F65A078569BF1028 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */; };
 		68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */; };
+		7C4A8997846AC52B3CB896B3 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BAD90D48F0141880590079F /* DiscoverView.swift */; };
 		A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14407271B6C18B64563B6B3A /* ContentView.swift */; };
 		B26E1A1C779F42B87ED795D2 /* MoodMixCore in Frameworks */ = {isa = PBXBuildFile; productRef = 744056EDE9295016774B079C /* MoodMixCore */; };
 		BE6F21078D33DC231953F304 /* LabelImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4CBAD71C95F172BD8EA13D4 /* LabelImport.swift */; };
@@ -51,6 +52,7 @@
 		67047641FC45FD7B1064BB88 /* MoodMixApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodMixApp.swift; sourceTree = "<group>"; };
 		6C12751E6F4C38401B99B672 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		78AA91AE631184EBE7C44AB3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7BAD90D48F0141880590079F /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodWidgets.swift; sourceTree = "<group>"; };
 		AE584FC1EFF747697ADB7654 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -94,6 +96,7 @@
 			children = (
 				7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */,
 				14407271B6C18B64563B6B3A /* ContentView.swift */,
+				7BAD90D48F0141880590079F /* DiscoverView.swift */,
 				78AA91AE631184EBE7C44AB3 /* Info.plist */,
 				D4CBAD71C95F172BD8EA13D4 /* LabelImport.swift */,
 				67047641FC45FD7B1064BB88 /* MoodMixApp.swift */,
@@ -223,6 +226,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */,
+				7C4A8997846AC52B3CB896B3 /* DiscoverView.swift in Sources */,
 				BE6F21078D33DC231953F304 /* LabelImport.swift in Sources */,
 				313294B9322076C40A60209A /* MoodMixApp.swift in Sources */,
 				68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */,

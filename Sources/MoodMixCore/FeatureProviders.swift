@@ -30,6 +30,42 @@ public struct ReccoBeatsClient: Sendable {
         return result
     }
 
+    public struct Recommendation: Sendable {
+        public let spotifyID: String
+        public let title: String
+        public let artists: [String]
+        public let durationMs: Int
+        public let isrc: String?
+        public let popularity: Int?
+    }
+
+    /// Songs similar to up to 5 seed tracks (Spotify IDs). Free, and fills in for Spotify's
+    /// recommendations endpoint, which is closed to new apps.
+    public func recommendations(seeds: [String], size: Int = 25) async -> [Recommendation] {
+        guard !seeds.isEmpty else { return [] }
+        var c = URLComponents(string: "https://api.reccobeats.com/v1/track/recommendation")!
+        c.queryItems = [URLQueryItem(name: "size", value: "\(min(max(size, 1), 100))"),
+                        URLQueryItem(name: "seeds", value: seeds.prefix(5).joined(separator: ","))]
+        struct R: Decodable {
+            struct T: Decodable {
+                struct Artist: Decodable { let name: String }
+                let trackTitle: String
+                let artists: [Artist]?
+                let durationMs: Int?
+                let isrc: String?
+                let href: String?
+                let popularity: Int?
+            }
+            let content: [T]
+        }
+        guard let data = try? await fetch(c.url!), let r = try? JSONDecoder().decode(R.self, from: data) else { return [] }
+        return r.content.compactMap { t in
+            guard let id = t.href?.split(separator: "/").last.map(String.init), !id.isEmpty else { return nil }
+            return Recommendation(spotifyID: id, title: t.trackTitle, artists: t.artists?.map(\.name) ?? [],
+                                  durationMs: t.durationMs ?? 200_000, isrc: t.isrc, popularity: t.popularity)
+        }
+    }
+
     private func fetch(_ url: URL, attempt: Int = 0) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(from: url)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -124,6 +160,56 @@ public struct ClaudeTagger: Sendable {
             "messages": [["role": "user", "content": "Tracks (id | title — artists (album)):\n\(list)"]],
         ]
 
+        let text = try await send(body)
+        struct Output: Decodable { let tracks: [Tag] }
+        do {
+            return try JSONDecoder().decode(Output.self, from: Data(text.utf8)).tracks
+        } catch {
+            throw TaggerError.badOutput
+        }
+    }
+
+    public struct Suggestion: Decodable, Sendable {
+        public let title: String
+        public let artist: String
+    }
+
+    /// Real songs similar to the given ones ("Title — Artist"), for Discover when ReccoBeats runs dry.
+    public func similarSongs(to seeds: [String], avoiding known: [String], count: Int = 10) async throws -> [Suggestion] {
+        let schema: [String: Any] = [
+            "type": "object", "additionalProperties": false, "required": ["songs"],
+            "properties": ["songs": ["type": "array", "items": [
+                "type": "object", "additionalProperties": false, "required": ["title", "artist"],
+                "properties": ["title": ["type": "string"], "artist": ["type": "string"]],
+            ]]],
+        ]
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 4000,
+            "fallbacks": "default",
+            "output_config": ["effort": "low", "format": ["type": "json_schema", "schema": schema]],
+            "system": "You recommend real, released songs that are on Spotify. Suggest songs that fit with the listener's songs in sound and mood, mixing well-known and lesser-known picks. Never repeat a song they already have.",
+            "messages": [["role": "user", "content": """
+            Their songs:
+            \(seeds.joined(separator: "\n"))
+
+            Already known (don't suggest): \(known.prefix(60).joined(separator: "; "))
+
+            Suggest \(count) songs.
+            """]],
+        ]
+        struct Output: Decodable { let songs: [Suggestion] }
+        do {
+            return try JSONDecoder().decode(Output.self, from: Data(try await send(body).utf8)).songs
+        } catch let error as TaggerError {
+            throw error
+        } catch {
+            throw TaggerError.badOutput
+        }
+    }
+
+    /// Sends a Messages API request and returns the final text block (structured JSON output).
+    private func send(_ body: [String: Any]) async throws -> String {
         var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
         req.httpMethod = "POST"
         req.timeoutInterval = 300
@@ -145,12 +231,7 @@ public struct ClaudeTagger: Sendable {
         let message = try JSONDecoder().decode(Message.self, from: data)
         if message.stop_reason == "refusal" { throw TaggerError.refused }
         guard let text = message.content.last(where: { $0.type == "text" })?.text else { throw TaggerError.badOutput }
-        struct Output: Decodable { let tracks: [Tag] }
-        do {
-            return try JSONDecoder().decode(Output.self, from: Data(text.utf8)).tracks
-        } catch {
-            throw TaggerError.badOutput
-        }
+        return text
     }
 }
 

@@ -61,6 +61,9 @@ Keep the Spotify app open on some device (Mac or phone) so there's somewhere to 
 `iOS/` holds the iPhone app (Now / Queue / Insights tabs, Liquid Glass on iOS 26) and its widgets: a Home Screen mood grid and Lock Screen buttons that start a mix.
 
 - **Now** shows the song as a spinning vinyl record with the cover as its label (same as the Mac bubble); the app icon is a vinyl too (`scripts/make-icon.swift` draws it).
+- **Discover:** a swipe deck of songs similar to your favorites, your queue, a mood, or any song you search for (suggestions from ReccoBeats, with Claude as a backup). Swipe right to add to a playlist or the queue, up to play next, left to skip; tap the cover to hear it from ~45 s in (Spotify no longer gives apps 30-second previews) and MoodMix puts back what was playing.
+- **Profile:** your Spotify name and picture, songs explored / added / played next / skipped, keep rate, day streak, moods you discover, and recent finds.
+- **Labels are never paid for twice:** they're backed up to the iPhone's Keychain (which survives reinstalling), batches over 25 songs ask first, and the Mac can hand its labels over (Mac Settings → *Export labels for iPhone*, AirDrop the `.moodmixlabels` file to the phone).
 - If Spotify isn't running on the phone, Generate opens Spotify for a moment; tap **◀ MoodMix** in the top-left corner to come back and the mix starts. Mixes play on the phone unless another device is already playing.
 
 1. In your Spotify app's dashboard, also add the Redirect URI `moodmix://callback`.
