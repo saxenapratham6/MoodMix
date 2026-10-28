@@ -13,6 +13,9 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     TARGETED_DEVICE_FAMILY: "1"
+    # Your Apple ID's Personal Team, so regenerating the project keeps signing set up.
+    DEVELOPMENT_TEAM: 5VL3LD9W46
+    CODE_SIGN_STYLE: Automatic
 targets:
   MoodMixiOS:
     type: application
@@ -34,6 +37,17 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.saxenapratham.moodmix
             CFBundleURLSchemes: [moodmix]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.saxenapratham.moodmix.labels
+            UTTypeDescription: MoodMix labels
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [moodmixlabels]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: MoodMix labels
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.saxenapratham.moodmix.labels]
+        LSSupportsOpeningDocumentsInPlace: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.saxenapratham.moodmix

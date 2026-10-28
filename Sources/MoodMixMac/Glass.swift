@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import ImageIO
 import SwiftUI
@@ -191,3 +192,5 @@ final class ArtworkPalette {
         return NSColor(hue: h, saturation: min(1, s * 1.3 + 0.1), brightness: min(max(b, 0.35), 0.6), alpha: 1)
     }
 }
+
+#endif

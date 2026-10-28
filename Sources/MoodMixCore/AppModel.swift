@@ -105,6 +105,7 @@ public final class AppModel {
         auth = SpotifyAuth(clientID: UserDefaults.standard.string(forKey: "spotify.clientID") ?? "")
         Task {
             profiles = await store.all()
+            await restoreLabelBackup()
             // Show the saved library instantly; refresh from Spotify after.
             library = await libraryCache.load()
             playlists = library.playlists
@@ -238,6 +239,16 @@ public final class AppModel {
         let needFeatures = todo.map(\.id).filter { profiles[$0]?.featureSource != .reccobeats }
         let measured = await ReccoBeatsClient().features(for: needFeatures)
         await save(measured.mapValues { f in TrackProfile(features: f, featureSource: .reccobeats) })
+
+        // A big batch costs real money: on the iPhone (or after a reinstall) ask first, and offer the free
+        // import from the Mac. Small batches (new songs you added) still label on their own.
+        if todo.count > autoLabelLimit && !labelBatchApproved {
+            unlabeledCount = todo.count
+            analysisStatus = nil
+            return
+        }
+        unlabeledCount = 0
+        labelBatchApproved = false
 
         guard !anthropicKey.isEmpty else {
             analysisStatus = nil
@@ -851,8 +862,66 @@ public final class AppModel {
         await refreshPlayback()
     }
 
+    // MARK: Keeping labels
+
+    /// Songs waiting for a go-ahead before they're sent to Claude (0 when nothing is waiting).
+    public private(set) var unlabeledCount = 0
+    /// Most songs Claude may label without asking. The iPhone sets a small number; the Mac labels freely.
+    @ObservationIgnored public var autoLabelLimit = Int.max
+    /// iPhone: keep a copy of all labels in the Keychain, which survives deleting and reinstalling the app.
+    @ObservationIgnored public var backsUpLabels = false
+    @ObservationIgnored private var labelBatchApproved = false
+    @ObservationIgnored private var backupTask: Task<Void, Never>?
+
+    /// "Yes, label them with Claude."
+    public func approveLabeling() async {
+        labelBatchApproved = true
+        await analyze()
+    }
+
+    /// All labels as a small file, for copying the Mac's labels to the iPhone.
+    public func exportLabels() -> Data { LabelArchive.encode(profiles) }
+
+    /// Adds labels from the Mac (or a backup). Your own corrections on this device win. Returns how many songs gained labels.
+    @discardableResult
+    public func importLabels(_ data: Data) async -> Int {
+        let incoming = LabelArchive.decode(data)
+        var changes: [String: TrackProfile] = [:]
+        for (id, profile) in incoming {
+            let existing = profiles[id]
+            if existing?.userTagged == true { continue }
+            if existing == nil || existing!.moods.isEmpty || profile.userTagged == true {
+                var merged = profile
+                if merged.features == nil { merged.features = existing?.features; merged.featureSource = existing?.featureSource }
+                changes[id] = merged
+            }
+        }
+        await save(changes)
+        let gained = changes.count
+        ActivityLog.write("imported labels for \(gained) songs")
+        if unlabeledCount > 0 { unlabeledCount = tracks.filter { profiles[$0.id]?.moods.isEmpty ?? true }.count }
+        return gained
+    }
+
+    private func restoreLabelBackup() async {
+        guard backsUpLabels, let data = Keychain.getData("labels.backup") else { return }
+        let restored = await importLabels(data)
+        if restored > 0 { ActivityLog.write("restored \(restored) song labels from the Keychain backup") }
+    }
+
+    private func scheduleLabelBackup() {
+        guard backsUpLabels else { return }
+        backupTask?.cancel()
+        backupTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            Keychain.setData(LabelArchive.encode(profiles), for: "labels.backup")
+        }
+    }
+
     private func save(_ changes: [String: TrackProfile]) async {
         guard !changes.isEmpty else { return }
+        defer { scheduleLabelBackup() }
         profiles.merge(changes) { old, new in
             // Never let a features-only update wipe out mood labels we already have.
             var merged = new

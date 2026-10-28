@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MoodMixCore
 
@@ -31,3 +32,5 @@ enum Exporter {
         }
     }
 }
+
+#endif

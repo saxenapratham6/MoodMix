@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MoodMixCore
 import SwiftUI
@@ -203,3 +204,5 @@ private struct ShortcutList: View {
         }
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MoodMixCore
 import SwiftUI
@@ -329,3 +330,5 @@ final class WidgetController {
         }
     }
 }
+
+#endif

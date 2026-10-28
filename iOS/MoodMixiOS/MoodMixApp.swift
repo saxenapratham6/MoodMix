@@ -8,6 +8,9 @@ struct MoodMixApp: App {
         let model = AppModel()
         model.momentProvider = { MomentContext(headphones: Self.headphonesConnected) }
         model.preferredDeviceType = "Smartphone"
+        // Labels are backed up to the Keychain (survives reinstalling), and big Claude batches need a yes first.
+        model.backsUpLabels = true
+        model.autoLabelLimit = 25
         model.beforePlayback = { [unowned model] in await SpotifyHandoff.shared.ensureDevice(for: model) }
         return model
     }()
@@ -21,9 +24,13 @@ struct MoodMixApp: App {
         }
     }
 
-    /// Widgets open `moodmix://generate?mood=chill` (or `mood=auto`).
+    /// Widgets open `moodmix://generate?mood=chill` (or `mood=auto`); AirDropped label files open here too.
     @MainActor
     private func handle(_ url: URL) async {
+        if url.isFileURL {
+            await LabelImport.shared.importFile(at: url, into: model)
+            return
+        }
         guard url.scheme == "moodmix", url.host == "generate" else { return }
         let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "mood" }?.value
         // A cold launch from a widget: give the saved library a moment to load.

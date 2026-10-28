@@ -1,3 +1,4 @@
+#if os(macOS)
 import MoodMixCore
 import ImageIO
 import SwiftUI
@@ -185,3 +186,5 @@ struct VinylRecord: View {
         }
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import CoreAudio
 import Foundation
 
@@ -44,3 +45,5 @@ enum AudioRoute {
         code.utf8.reduce(0) { $0 << 8 | UInt32($1) }
     }
 }
+
+#endif

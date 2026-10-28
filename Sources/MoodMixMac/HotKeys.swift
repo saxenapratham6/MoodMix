@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Carbon.HIToolbox
 import MoodMixCore
@@ -74,3 +75,5 @@ final class HotKeys {
         }, 1, &spec, nil, nil)
     }
 }
+
+#endif

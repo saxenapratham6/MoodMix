@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MoodMixCore
 import Network
@@ -48,3 +49,5 @@ final class LoopbackAuthProvider: AuthCodeProvider, @unchecked Sendable {
         }
     }
 }
+
+#endif

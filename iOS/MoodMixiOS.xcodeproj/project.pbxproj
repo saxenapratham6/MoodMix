@@ -16,6 +16,7 @@
 		68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */; };
 		A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14407271B6C18B64563B6B3A /* ContentView.swift */; };
 		B26E1A1C779F42B87ED795D2 /* MoodMixCore in Frameworks */ = {isa = PBXBuildFile; productRef = 744056EDE9295016774B079C /* MoodMixCore */; };
+		BE6F21078D33DC231953F304 /* LabelImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4CBAD71C95F172BD8EA13D4 /* LabelImport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +54,7 @@
 		7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9707C0FA95EC9C719EBAFC8F /* MoodWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodWidgets.swift; sourceTree = "<group>"; };
 		AE584FC1EFF747697ADB7654 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D4CBAD71C95F172BD8EA13D4 /* LabelImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelImport.swift; sourceTree = "<group>"; };
 		DDF9BB084B0FEA734CD61B33 /* MoodMixWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MoodMixWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F2E4846A5401B2895CE54C34 /* MoodMix */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MoodMix; path = ..; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -93,6 +95,7 @@
 				7BFAC080A0F19B97BFF7AFF8 /* Assets.xcassets */,
 				14407271B6C18B64563B6B3A /* ContentView.swift */,
 				78AA91AE631184EBE7C44AB3 /* Info.plist */,
+				D4CBAD71C95F172BD8EA13D4 /* LabelImport.swift */,
 				67047641FC45FD7B1064BB88 /* MoodMixApp.swift */,
 				4FC605D75AC1A31FFAC8AA68 /* SpotifyHandoff.swift */,
 				6C12751E6F4C38401B99B672 /* Theme.swift */,
@@ -170,6 +173,14 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					0D1DB153233FBDFEB5F540BE = {
+						DevelopmentTeam = 5VL3LD9W46;
+						ProvisioningStyle = Automatic;
+					};
+					D03063C4578688FFA22263F5 = {
+						DevelopmentTeam = 5VL3LD9W46;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 27BD237048B2D1F2677DFBD8 /* Build configuration list for PBXProject "MoodMixiOS" */;
@@ -212,6 +223,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A9561BC8F57DD0AFAC527AF9 /* ContentView.swift in Sources */,
+				BE6F21078D33DC231953F304 /* LabelImport.swift in Sources */,
 				313294B9322076C40A60209A /* MoodMixApp.swift in Sources */,
 				68774750CBDD1A07FDB51392 /* SpotifyHandoff.swift in Sources */,
 				4C9F29B8335EEED6F904ED1B /* Theme.swift in Sources */,
@@ -302,9 +314,11 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 5VL3LD9W46;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -383,9 +397,11 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 5VL3LD9W46;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

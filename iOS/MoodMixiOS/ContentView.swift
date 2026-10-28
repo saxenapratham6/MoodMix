@@ -20,6 +20,9 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showSettings) { SettingsSheet() }
+        .alert(LabelImport.shared.message ?? "", isPresented: .constant(LabelImport.shared.message != nil)) {
+            Button("OK") { LabelImport.shared.dismiss() }
+        }
         .overlay(alignment: .top) {
             if SpotifyHandoff.shared.waiting {
                 Label("Opening Spotify… come back with ◀ MoodMix (top left) and your mix starts.", systemImage: "arrow.uturn.backward.circle.fill")
@@ -77,6 +80,9 @@ private struct NowView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
+                    if model.unlabeledCount > 0 {
+                        LabelPrompt()
+                    }
                     nowPlaying
                     MoodPicker()
                     actions
@@ -519,6 +525,7 @@ private struct LoginView: View {
 private struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var importingLabels = false
 
     var body: some View {
         @Bindable var model = model
@@ -546,14 +553,19 @@ private struct SettingsSheet: View {
                 Section {
                     SecureField("Anthropic API key", text: $model.anthropicKey)
                     TextField("Model", text: $model.claudeModel).autocorrectionDisabled().textInputAutocapitalization(.never)
+                    Button("Import labels from Mac…", systemImage: "square.and.arrow.down") { importingLabels = true }
                 } header: {
                     Text("Claude (mood labels)")
                 } footer: {
-                    Text("Each song is labeled once and saved on this phone.")
+                    Text("Each song is labeled once. Labels are also kept in this phone's Keychain, so reinstalling MoodMix doesn't label them again. To skip labeling entirely, export them from the Mac app (Settings → Export labels for iPhone) and import the file here.")
                 }
             }
             .navigationTitle("Settings")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .fileImporter(isPresented: $importingLabels, allowedContentTypes: [.moodMixLabels, .data]) { result in
+                guard case .success(let url) = result else { return }
+                Task { await LabelImport.shared.importFile(at: url, into: model) }
+            }
         }
     }
 }

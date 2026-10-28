@@ -14,9 +14,11 @@ let package = Package(
             name: "MoodMixMac",
             dependencies: ["MoodMixCore"],
             exclude: ["Info.plist"],
-            // Embed an Info.plist so macOS can show "MoodMix wants to control Spotify".
+            // Embed an Info.plist so macOS can show "MoodMix wants to control Spotify". The path is absolute
+            // because Xcode links from a different working directory than `swift build`.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
-                                           "-Xlinker", "Sources/MoodMixMac/Info.plist"])]
+                                           "-Xlinker", Context.packageDirectory + "/Sources/MoodMixMac/Info.plist"],
+                                          .when(platforms: [.macOS]))]
         ),
         .testTarget(name: "MoodMixCoreTests", dependencies: ["MoodMixCore"]),
     ]

@@ -1,3 +1,4 @@
+#if os(macOS)
 import MoodMixCore
 import SwiftUI
 
@@ -34,6 +35,12 @@ struct SettingsView: View {
                 }
             }
             Section("Claude (mood labels)") {
+                HStack {
+                    Text("Copy all \(model.taggedCount) labels to the iPhone app (AirDrop the file), so it never pays to label them again.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Export labels for iPhone…") { exportLabels() }
+                }
                 SecureField("Anthropic API key", text: $model.anthropicKey)
                 TextField("Model", text: $model.claudeModel)
                 Text("Each song is labeled once and cached. Use claude-haiku-5-5 here for a much cheaper first pass over a huge playlist.")
@@ -45,3 +52,21 @@ struct SettingsView: View {
         .padding()
     }
 }
+
+extension SettingsView {
+    private func exportLabels() {
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "MoodMix labels.moodmixlabels"
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try model.exportLabels().write(to: url)
+            NSWorkspace.shared.activateFileViewerSelecting([url])  // ready to AirDrop to the iPhone
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
+
+#endif

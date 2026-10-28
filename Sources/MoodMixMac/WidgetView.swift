@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Charts
 import MoodMixCore
@@ -1167,3 +1168,5 @@ private struct LoginSection: View {
         .padding(.vertical, 20)
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import MoodMixCore
 import SwiftUI
@@ -100,3 +101,5 @@ struct MoodMixApp: App {
         }
     }
 }
+
+#endif

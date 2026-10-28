@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 
 /// Makes sure the Spotify desktop app is running, so MoodMix always has a device to play on.
@@ -49,3 +50,5 @@ enum SpotifyLauncher {
         }
     }
 }
+
+#endif
