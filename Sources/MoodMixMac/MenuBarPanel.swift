@@ -88,7 +88,7 @@ struct MenuBarPanel: View {
             }
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 340)
         .background(alignment: .top) {
             LinearGradient(colors: [accent.opacity(0.55), .clear], startPoint: .top, endPoint: .center)
                 .allowsHitTesting(false)
@@ -100,33 +100,59 @@ struct MenuBarPanel: View {
         }
     }
 
-    @ViewBuilder private func nowPlaying(_ accent: Color) -> some View {
-        HStack(spacing: 12) {
-            if let np = model.nowPlaying {
-                Artwork(url: np.track.artworkURL, size: 64, radius: 10)
-                    .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(np.track.name).font(.headline).lineLimit(1)
-                    Text(np.track.artistLine).font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
-                    HStack(spacing: 4) {
-                        ForEach(model.profiles[np.track.id]?.moods.prefix(2) ?? [], id: \.self) { MoodTag(mood: $0) }
+    /// Song info on top, then a progress bar and the controls on their own row, like macOS's Now Playing.
+    private func nowPlaying(_ accent: Color) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                if let np = model.nowPlaying {
+                    Artwork(url: np.track.artworkURL, size: 64, radius: 10)
+                        .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(np.track.name).font(.headline).lineLimit(1)
+                        Text(np.track.artistLine).font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                        HStack(spacing: 4) {
+                            ForEach(model.profiles[np.track.id]?.moods.prefix(2) ?? [], id: \.self) { MoodTag(mood: $0) }
+                        }
+                    }
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 64, height: 64)
+                        .background(Theme.green, in: .rect(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MoodMix").font(.headline)
+                        Text("Nothing playing").font(.caption).foregroundStyle(.white.opacity(0.7))
                     }
                 }
-            } else {
-                Image(systemName: "waveform")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 64, height: 64)
-                    .background(Theme.green, in: .rect(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("MoodMix").font(.headline)
-                    Text("Nothing playing").font(.caption).foregroundStyle(.white.opacity(0.7))
-                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            if let np = model.nowPlaying {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let progress = np.progress(at: context.date)
+                    VStack(spacing: 4) {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(.white.opacity(0.15))
+                                Capsule().fill(.white.opacity(0.9))
+                                    .frame(width: geo.size.width * CGFloat(progress) / CGFloat(max(np.track.durationMs, 1)))
+                            }
+                        }
+                        .frame(height: 4)
+                        HStack {
+                            Text(formatTime(progress))
+                            Spacer()
+                            Text("-" + formatTime(np.track.durationMs - progress))
+                        }
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.6))
+                    }
+                }
+                Transport(size: .regular)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .overlay(alignment: .bottomTrailing) { Transport(size: .regular).scaleEffect(0.9, anchor: .bottomTrailing) }
-        .padding(10)
+        .padding(14)
         .liquidGlass(tint: accent.opacity(0.35), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
