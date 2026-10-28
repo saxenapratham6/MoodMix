@@ -40,9 +40,11 @@ Pick a mood and MoodMix builds a queue **only from your playlist** (no songs Spo
 1. **Download** `MoodMix-macOS.zip` from the [latest release](https://github.com/saxenapratham6/MoodMix/releases/latest).
 2. **Unzip** it (double-click the file) to get `MoodMix.app`.
 3. **Drag `MoodMix.app` into your Applications folder.**
-4. **Open it.** MoodMix isn't notarized by Apple, so the first time macOS says it can't verify the app:
-   - right-click `MoodMix.app` → **Open** → **Open**, or
-   - open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+4. **Open it.** MoodMix isn't notarized by Apple, so the first time macOS shows *"MoodMix" Not Opened*. Click **Done** (not *Move to Trash*), then:
+   - open **System Settings → Privacy & Security**, scroll to **Security**, and click **Open Anyway** next to *"MoodMix" was blocked*;
+   - enter your password and click **Open**.
+
+   You only do this once. (On macOS 14, right-click the app → **Open** also works.) Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/MoodMix.app`
 5. MoodMix appears as a glass bar at the bottom of your screen and a 〰 icon in the menu bar. It has no Dock icon.
 
 **Start at login:** System Settings → General → Login Items → **+** → MoodMix.
