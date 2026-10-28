@@ -10,7 +10,11 @@ final class LoopbackAuthProvider: AuthCodeProvider, @unchecked Sendable {
     let redirectURI = URL(string: "http://127.0.0.1:8888/callback")!
 
     func authorize(url: URL) async throws -> URL {
-        let listener = try NWListener(using: .tcp, on: Self.port)
+        // Only this Mac can reach the login receiver (not other devices on the network).
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: Self.port)
+        parameters.acceptLocalOnly = true
+        let listener = try NWListener(using: parameters)
         defer { listener.cancel() }
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -38,6 +42,8 @@ final class LoopbackAuthProvider: AuthCodeProvider, @unchecked Sendable {
                     }
                 }
             }
+            // Give up after 5 minutes so the receiver never stays open.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 300) { finish(.failure(URLError(.timedOut))) }
             listener.stateUpdateHandler = { state in
                 switch state {
                 case .ready: NSWorkspace.shared.open(url)

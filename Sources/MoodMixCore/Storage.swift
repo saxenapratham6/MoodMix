@@ -1,31 +1,77 @@
 import Foundation
 import Security
 
-/// Tiny Keychain wrapper for tokens and API keys.
+/// Keychain storage for the Spotify login and the Anthropic key.
+///
+/// - macOS: each item is locked to MoodMix itself. Any other program (even Apple's `security` tool)
+///   that tries to read it makes macOS ask you first.
+/// - iOS: secrets are readable only while the phone is unlocked and never leave this device
+///   (not in backups, not moved to a new phone).
 public enum Keychain {
     static let service = "MoodMix"
 
     public static func set(_ value: String?, for account: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: service,
-                                    kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
-        guard let value, !value.isEmpty else { return }
-        var add = query
-        add[kSecValueData as String] = Data(value.utf8)
-        SecItemAdd(add as CFDictionary, nil)
+        store(value.flatMap { $0.isEmpty ? nil : Data($0.utf8) }, for: account, secret: true)
     }
 
     public static func get(_ account: String) -> String? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: service,
-                                    kSecAttrAccount as String: account,
-                                    kSecReturnData as String: true,
-                                    kSecMatchLimit as String: kSecMatchLimitOne]
-        var out: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        getData(account).flatMap { String(data: $0, encoding: .utf8) }
     }
+
+    /// For non-secret data that should survive reinstalling the iPhone app (label backups, stats).
+    public static func setData(_ data: Data?, for account: String) {
+        store(data, for: account, secret: false)
+    }
+
+    public static func getData(_ account: String) -> Data? {
+        var query = baseQuery(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess else { return nil }
+        return out as? Data
+    }
+
+    /// Re-saves items written by older versions so they get the stricter protection above. Runs once.
+    public static func hardenExistingItems() {
+        let flag = "keychain.hardened.v1"
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        for account in ["spotify.tokens", "anthropic.apiKey"] {
+            if let value = get(account) { set(value, for: account) }
+        }
+        UserDefaults.standard.set(true, forKey: flag)
+    }
+
+    private static func baseQuery(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: service,
+         kSecAttrAccount as String: account]
+    }
+
+    private static func store(_ data: Data?, for account: String, secret: Bool) {
+        SecItemDelete(baseQuery(account) as CFDictionary)
+        guard let data, !data.isEmpty else { return }
+        var add = baseQuery(account)
+        add[kSecValueData as String] = data
+        #if os(macOS)
+        if let access = accessForThisAppOnly() { add[kSecAttrAccess as String] = access }
+        #else
+        add[kSecAttrAccessible as String] = secret ? kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+                                                   : kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        #endif
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    #if os(macOS)
+    /// An access list that trusts only the running app (identified by its code signature).
+    private static func accessForThisAppOnly() -> SecAccess? {
+        var me: SecTrustedApplication?
+        guard SecTrustedApplicationCreateFromPath(nil, &me) == errSecSuccess, let me else { return nil }
+        var access: SecAccess?
+        guard SecAccessCreate("MoodMix" as CFString, [me] as CFArray, &access) == errSecSuccess else { return nil }
+        return access
+    }
+    #endif
 }
 
 /// On-disk cache of track profiles so each song is analyzed only once.
@@ -108,34 +154,9 @@ public enum ActivityLog {
                 try? handle.close()
             } else {
                 try? Data(line.utf8).write(to: url)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
             }
         }
-    }
-}
-
-extension Keychain {
-    public static func setData(_ data: Data?, for account: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: service,
-                                    kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
-        guard let data, !data.isEmpty else { return }
-        var add = query
-        add[kSecValueData as String] = data
-        // Readable without the phone being unlocked first, and never synced elsewhere.
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
-    }
-
-    public static func getData(_ account: String) -> Data? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: service,
-                                    kSecAttrAccount as String: account,
-                                    kSecReturnData as String: true,
-                                    kSecMatchLimit as String: kSecMatchLimitOne]
-        var out: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess else { return nil }
-        return out as? Data
     }
 }
 

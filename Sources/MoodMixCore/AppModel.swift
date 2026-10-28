@@ -112,6 +112,7 @@ public final class AppModel {
 
     public init() {
         clientID = UserDefaults.standard.string(forKey: "spotify.clientID") ?? ""
+        Keychain.hardenExistingItems()
         anthropicKey = Keychain.get("anthropic.apiKey") ?? ""
         claudeModel = UserDefaults.standard.string(forKey: "claude.model") ?? ClaudeTagger.defaultModel
         autoMood = UserDefaults.standard.bool(forKey: "mood.auto")
@@ -1071,6 +1072,8 @@ public final class AppModel {
     /// Adds labels from the Mac (or a backup). Your own corrections on this device win. Returns how many songs gained labels.
     @discardableResult
     public func importLabels(_ data: Data) async -> Int {
+        // A real labels file is tens of KB; refuse anything absurd rather than decode it.
+        guard data.count < 5_000_000 else { return 0 }
         let incoming = LabelArchive.decode(data)
         var changes: [String: TrackProfile] = [:]
         for (id, profile) in incoming {

@@ -36,9 +36,9 @@ Spotify doesn't let other apps process its audio, so the actual crossfade comes 
    - Redirect URI: `http://127.0.0.1:8888/callback`
    - In Dev Mode, the app owner needs Premium.
 2. Get an Anthropic API key from https://console.anthropic.com.
-3. Build and run:
+3. Build, sign and run (signing with your Apple Development certificate keeps the Keychain lock working across rebuilds):
    ```bash
-   swift run MoodMix
+   ./scripts/run-mac.sh
    ```
 4. From the MoodMix menu bar icon → **Settings…**, paste your Spotify Client ID and Anthropic key.
 5. Expand the widget, log in, pick your playlist (moods are labeled automatically, and new songs you add in Spotify are picked up within a minute), choose a mood and press **Generate**.
@@ -72,12 +72,20 @@ Keep the Spotify app open on some device (Mac or phone) so there's somewhere to 
 
 There's no Dynamic Island / Live Activity: keeping it up to date while Spotify plays in the background would need a push server.
 
+## Security
+
+- **No secrets in this repo.** Spotify login uses PKCE (no client secret exists); the Client ID and Apple team ID that do appear aren't secret.
+- **Mac:** the Spotify login and Anthropic key live in your login Keychain, readable only by MoodMix; any other program (even `security`) makes macOS ask you. `scripts/run-mac.sh` signs the app so that lock survives rebuilds.
+- **iPhone:** secrets are readable only while the phone is unlocked and never leave the device (not in backups, not moved to a new phone).
+- **Spotify login on the Mac** listens on 127.0.0.1 only, for at most 5 minutes; a random state value rejects forged callbacks.
+- **Spotify Development Mode** only lets accounts you add under *User Management* log in, so even with this code nobody else can use your Spotify app.
+- Keys go only to `api.anthropic.com` / `api.spotify.com` / `accounts.spotify.com` over HTTPS; logs never contain keys or tokens.
+
 ## Notes
 
 - Songs added to a playlist more than once are counted once (the card notes how many duplicates were skipped).
 - Spotify only returns playlist items for playlists you **own or collaborate on**. To use someone else's playlist, copy it to your own playlist first.
 - Claude's default model is `claude-opus-5-5`. You can switch to `claude-haiku-5-5` in Settings for a much cheaper first pass over thousands of songs. Results are cached in `~/Library/Application Support/MoodMix/profiles.json`.
-- Tokens and keys are stored in the macOS Keychain.
 
 ## Roadmap
 
