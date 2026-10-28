@@ -206,7 +206,6 @@ final class WidgetController {
     func dragEnded() {
         let mouse = NSEvent.mouseLocation
         let visible = (NSScreen.screens.first { $0.frame.contains(mouse) } ?? panel.screen ?? NSScreen.main)?.visibleFrame ?? visibleFrame
-        let inner = panel.frame.insetBy(dx: Self.pad, dy: Self.pad)
 
         switch mode {
         case .bubble:

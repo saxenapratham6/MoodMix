@@ -4,3 +4,4 @@
 *.xcodeproj/xcuserdata/
 iOS/build/
 xcuserdata/
+dist/

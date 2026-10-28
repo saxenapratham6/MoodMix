@@ -1,5 +1,7 @@
 // Draws MoodMix's app icon: a vinyl record with a Spotify-green label and a waveform.
-// Usage: swift scripts/make-icon.swift <output.png>
+// Usage: swift scripts/make-icon.swift <output.png> [--mac]
+//   iOS: a full-bleed opaque square (iOS rounds the corners).
+//   --mac: the same art on a rounded-square tile with the standard margin, on a transparent canvas.
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -7,9 +9,24 @@ import UniformTypeIdentifiers
 
 let size: CGFloat = 1024
 let space = CGColorSpace(name: CGColorSpace.sRGB)!
-// App Store icons must be fully opaque, so draw into a bitmap without alpha.
+let mac = CommandLine.arguments.contains("--mac")
+// iOS icons must be fully opaque; the Mac tile needs a transparent margin around it.
 let ctx = CGContext(data: nil, width: Int(size), height: Int(size), bitsPerComponent: 8, bytesPerRow: 0,
-                    space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+                    space: space, bitmapInfo: mac ? CGImageAlphaInfo.premultipliedLast.rawValue : CGImageAlphaInfo.noneSkipLast.rawValue)!
+if mac {
+    // macOS icon grid: an 824 px rounded square centered on the 1024 px canvas.
+    let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 0, height: -10), blur: 28, color: CGColor(gray: 0, alpha: 0.35))
+    ctx.addPath(CGPath(roundedRect: tile, cornerWidth: 185, cornerHeight: 185, transform: nil))
+    ctx.setFillColor(CGColor(gray: 0.04, alpha: 1))
+    ctx.fillPath()
+    ctx.restoreGState()
+    ctx.addPath(CGPath(roundedRect: tile, cornerWidth: 185, cornerHeight: 185, transform: nil))
+    ctx.clip()
+    ctx.translateBy(x: tile.minX, y: tile.minY)
+    ctx.scaleBy(x: tile.width / size, y: tile.height / size)
+}
 let green = CGColor(red: 0.118, green: 0.843, blue: 0.376, alpha: 1)
 let center = CGPoint(x: size / 2, y: size / 2)
 

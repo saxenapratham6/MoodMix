@@ -1,93 +1,153 @@
-# MoodMix
+<p align="center">
+  <img src="iOS/MoodMixiOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="MoodMix icon: a vinyl record with a green label">
+</p>
 
-A floating Spotify widget for Premium users. Pick a mood and MoodMix builds a queue **only from your own playlist** (no suggested tracks), leaning on your favorites. It orders the songs so each one flows into the next, then plays them on your Spotify.
+<h1 align="center">MoodMix</h1>
 
-On macOS it's a Liquid Glass widget (no window, no Dock icon), tinted with the current album art:
+<p align="center">
+  Mood-based, smoothly mixed queues from <b>your own</b> Spotify playlists, as a floating Mac widget and an iPhone app.
+</p>
 
-- **Bar:** now playing, ⏮ ⏯ ⏭, **Generate**, and a chevron that grows the control card out of the bar: playlists, moods, energy shape, length, favorites weight, **Generate** / **Match** (queue songs that fit what's playing now) / **Analyze**, and Up next.
-- **Move it anywhere:** drag the bar or card. Drag it to the left or right screen edge (or click ◌) and it becomes a **bubble** with the album art and a progress ring; click the bubble to bring the bar back.
-- **Queue:** the card's Queue tab shows now playing and what's next. Drag to reorder, remove songs, double-click to jump, or search the playlist to add any song *next* or *at the end*. A song from another mood plays where you put it, then the queue carries on in its mood, topping itself up when it runs low. MoodMix plays the queue from a private **MoodMix Queue** playlist in your library (Spotify's desktop app can drop plain lists of songs); songs added at the end just append to it, while reorders rewrite it and resume the current song where it was (expect a brief blip).
-- **Bubble:** a spinning vinyl record with the album cover as its label and a progress ring; hover it for ⏮ ⏯ ⏭ underneath, click it to reopen the bar.
-- **Menu bar:** a Now Playing–style glass panel with quick moods, Generate, Match, show/hide, bubble, reset position, Settings and Quit.
-- It launches Spotify in the background if it isn't open.
+<p align="center">
+  <a href="https://github.com/saxenapratham6/MoodMix/releases/latest"><img src="https://img.shields.io/github/v/release/saxenapratham6/MoodMix?label=download&color=1ED760" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/iOS-18%2B-black?logo=apple" alt="iOS 18+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+</p>
 
-macOS first. The core (`MoodMixCore`) is platform-neutral, so the iOS app can reuse it.
+Pick a mood and MoodMix builds a queue **only from your playlist** (no songs Spotify slips in), leaning on the songs you play most. It orders them so each one flows into the next (matching keys and tempos, shaping the energy) and plays them on your Spotify. It learns from your skips, and on the iPhone you can swipe through new songs similar to yours.
+
+> Requires **Spotify Premium** (Spotify only lets Premium accounts be controlled by other apps). An **Anthropic API key** is recommended for labeling each song's mood.
+
+## Contents
+
+- [Installation](#installation)
+  - [macOS](#macos)
+  - [iPhone](#iphone)
+  - [Build from source](#build-from-source)
+- [First-time setup](#first-time-setup)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Security](#security)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Installation
+
+### macOS
+
+1. **Download** `MoodMix-macOS.zip` from the [latest release](https://github.com/saxenapratham6/MoodMix/releases/latest).
+2. **Unzip** it (double-click the file) to get `MoodMix.app`.
+3. **Drag `MoodMix.app` into your Applications folder.**
+4. **Open it.** MoodMix isn't notarized by Apple, so the first time macOS says it can't verify the app:
+   - right-click `MoodMix.app` → **Open** → **Open**, or
+   - open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
+5. MoodMix appears as a glass bar at the bottom of your screen and a 〰 icon in the menu bar. It has no Dock icon.
+
+**Start at login:** System Settings → General → Login Items → **+** → MoodMix.
+
+**Updating:** download the new zip and replace `MoodMix.app` in Applications. Your settings and labels stay.
+
+**Uninstalling:** quit from the 〰 menu, delete `MoodMix.app`, and optionally remove `~/Library/Application Support/MoodMix` and the *MoodMix* entries in Keychain Access.
+
+### iPhone
+
+The iPhone app is installed from Xcode onto your own phone (it isn't on the App Store).
+
+1. Install [Xcode](https://apps.apple.com/app/xcode/id497799835) 26 or later, and add your Apple ID in **Xcode → Settings → Accounts** (a free Apple ID works).
+2. Clone this repository and open `iOS/MoodMixiOS.xcodeproj`.
+3. For both the **MoodMixiOS** and **MoodMixWidgets** targets, open **Signing & Capabilities** and choose your Team. If Xcode says the bundle ID is taken, change `com.saxenapratham.moodmix` to something unique (the widget's ID must start with the app's).
+4. Connect your iPhone, select it at the top of Xcode, and press **Run**.
+5. On the iPhone:
+   - turn on **Settings → Privacy & Security → Developer Mode** (it restarts the phone), and
+   - trust yourself in **Settings → General → VPN & Device Management**.
+
+With a free Apple ID, the app stops opening after 7 days. Plug in and press **Run** again; your login, labels and stats are kept. A paid Apple Developer account removes the limit.
+
+### Build from source
+
+macOS 14+ and Xcode 26 (or its command line tools):
+
+```bash
+git clone https://github.com/saxenapratham6/MoodMix.git
+cd MoodMix
+./scripts/run-mac.sh       # build, sign with your Apple Development certificate if you have one, and start
+./scripts/package-mac.sh   # build dist/MoodMix.app and dist/MoodMix-macOS.zip
+swift test                 # run the tests
+```
+
+The iPhone project is generated from `iOS/project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`cd iOS && xcodegen generate`).
+
+## First-time setup
+
+MoodMix talks to Spotify through **your own** Spotify developer app, so nothing goes through anyone else's servers.
+
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and click **Create app**:
+   - **Redirect URIs:** add `http://127.0.0.1:8888/callback` (Mac) and `moodmix://callback` (iPhone). Click **Add** for each, then **Save**.
+   - **APIs:** tick **Web API**.
+   - In **User Management**, add the Spotify accounts that may use it (yours is added automatically).
+2. Copy the app's **Client ID**. It's labeled *Client ID*; you never need the *Client secret*.
+3. Optional but recommended: create an API key at the [Anthropic Console](https://console.anthropic.com).
+4. In MoodMix, open **Settings** (〰 menu → Settings on the Mac; the gear on the iPhone), paste the Client ID and the Anthropic key, and log in with Spotify.
+5. Pick your playlist. MoodMix measures each song, labels its moods once, and saves the result.
+
+Already labeled everything on the Mac? Use **Settings → Export labels for iPhone**, AirDrop the file to your phone, and the iPhone won't label those songs again.
+
+## Features
+
+**Mac widget**
+- A Liquid Glass bar tinted with the current album art: now playing, ⏮ ⏯ ⏭, **Generate**, and a card that slides out with playlists, moods, energy shape, length and how much your favorites count.
+- **Queue:** drag to reorder, remove, double-click to jump, or search your playlist to add a song next or at the end. Add a happy song to a sad queue and the sad songs carry on after it; the queue tops itself up in its mood.
+- **Bubble:** drag the bar to a screen edge and it becomes a spinning vinyl record with the cover as its label; hover for ⏮ ⏯ ⏭.
+- **Menu bar panel** in the style of macOS's Now Playing, with quick moods.
+- **Shortcuts from any app:** ⌃⌥G generate · ⌃⌥Space play/pause · ⌃⌥← → previous/next · ⌃⌥O card · ⌃⌥M widget · ⌃⌥B bubble · ⌃⌥1–8 mood mixes.
+- **Sleep timer:** after this song, at the end of the mix, or fade out after 15–90 minutes.
+
+**iPhone app**
+- **Now:** a spinning vinyl of the current song, moods, Generate and Match.
+- **Discover:** swipe through songs similar to your favorites, your queue, a mood, or any song you search for. Right adds to a playlist or the queue, up plays next, left skips; tap to listen.
+- **Profile:** songs explored, added and skipped, keep rate, day streak, the moods you discover, and recent finds.
+- **Widgets:** a Home Screen mood grid and Lock Screen buttons that start a mix.
+- **Labels are never paid for twice:** kept in the iPhone's Keychain (which survives reinstalling), and batches of more than 25 songs ask first.
+
+**Both**
+- **Auto mood** from the time of day, your headphones and your habits; **journeys** through up to 4 moods (e.g. Sad → Chill → Happy).
+- **Learns from you:** skipping a song lowers its fit for that mood, listening through raises it; you can also set a song's mood yourself.
+- **Save the queue as a playlist**, see your playlist by mood, remove duplicate songs, and **export** playlists as CSV for TuneMyMusic/Soundiiz (to move to Apple Music or YouTube Music) or JSON.
 
 ## How it works
 
-1. **Load:** reads your playlist through the official Spotify Web API (`/playlists/{id}/items`).
-2. **Favorites:** scores each song from your top tracks (4 weeks, 6 months and all time) and your Liked Songs.
-3. **Analyze (cached once per song):**
-   - Measured audio data (energy, valence, tempo, key) comes from [ReccoBeats](https://reccobeats.com), because Spotify closed its audio-features API to new apps in 2024.
-   - Claude labels every song's moods and estimates audio data for any song ReccoBeats doesn't know.
-4. **Pick:** keeps songs that fit the mood, ranked by mood fit and favorites (you set the balance), with a little randomness so each remix is different.
-5. **Order (the "mixing"):** each next song is chosen by
-   - harmonic compatibility on the Camelot wheel (same key, ±1, or relative major/minor),
-   - tempo closeness (half and double time count as a match),
-   - your energy arc: steady, build up, wind down, or peak in the middle,
-   - and two songs by the same artist never play back-to-back.
-6. **Play:** starts playback of exactly that list, with shuffle off, on your active Spotify device.
+1. **Load** your playlist with the official Spotify Web API, and score favorites from your top tracks and Liked Songs.
+2. **Analyze** each song once: energy, mood, tempo and key from [ReccoBeats](https://reccobeats.com) (Spotify closed its audio-features API to new apps in 2024), and mood labels from Claude. Everything is saved.
+3. **Pick** the songs that fit the mood, weighted by how much you love them, with a little randomness so every mix differs.
+4. **Order** them so neighbors share a compatible key on the Camelot wheel and a similar tempo (half and double time count), following your energy shape, never repeating an artist back to back.
+5. **Play** them from a private *MoodMix Queue* playlist in your library (Spotify's desktop app can silently drop plain lists of songs), check the first song really started, and keep following Spotify as you skip.
 
-Spotify doesn't let other apps process its audio, so the actual crossfade comes from Spotify itself. Turn on **Settings → Playback → Crossfade (6–8 s)** or **Automix**. MoodMix's ordering is what makes those fades sound good.
-
-## Setup
-
-1. Go to https://developer.spotify.com/dashboard, click **Create app** and choose **Web API**.
-   - Redirect URI: `http://127.0.0.1:8888/callback`
-   - In Dev Mode, the app owner needs Premium.
-2. Get an Anthropic API key from https://console.anthropic.com.
-3. Build, sign and run (signing with your Apple Development certificate keeps the Keychain lock working across rebuilds):
-   ```bash
-   ./scripts/run-mac.sh
-   ```
-4. From the MoodMix menu bar icon → **Settings…**, paste your Spotify Client ID and Anthropic key.
-5. Expand the widget, log in, pick your playlist (moods are labeled automatically, and new songs you add in Spotify are picked up within a minute), choose a mood and press **Generate**.
-
-Keep the Spotify app open on some device (Mac or phone) so there's somewhere to play.
-
-## Everything else it does
-
-- **Learns from you:** skip a song within 30 s and it fits that mood a little less; listen through and it fits a little more. Right-click any song → *This song is more…* to set its mood yourself.
-- **Auto mood:** picks the mood from the time of day, whether headphones are on, and what you usually choose around now.
-- **Journeys:** a mix that moves through up to 4 moods in order (e.g. Sad → Chill → Happy), easing the energy between sections.
-- **Sleep timer** (🌙): stop after this song, at the end of the mix, or fade out after 15–90 minutes.
-- **Save as playlist:** save the queue to your Spotify library.
-- **Insights:** songs per mood, moods that are thin, your most-played songs, and a duplicate cleaner.
-- **Export:** CSV for TuneMyMusic / Soundiiz (to move to Apple Music or YouTube Music) and JSON with each song's moods, BPM and key.
-- **Shortcuts (any app, also listed in the menu bar panel):** ⌃⌥G generate · ⌃⌥Space play/pause · ⌃⌥← → previous/next · ⌃⌥O card · ⌃⌥M widget · ⌃⌥B bubble · ⌃⌥1–8 mood mixes.
-
-## iPhone app
-
-`iOS/` holds the iPhone app (Now / Queue / Insights tabs, Liquid Glass on iOS 26) and its widgets: a Home Screen mood grid and Lock Screen buttons that start a mix.
-
-- **Now** shows the song as a spinning vinyl record with the cover as its label (same as the Mac bubble); the app icon is a vinyl too (`scripts/make-icon.swift` draws it).
-- **Discover:** a swipe deck of songs similar to your favorites, your queue, a mood, or any song you search for (suggestions from ReccoBeats, with Claude as a backup). Swipe right to add to a playlist or the queue, up to play next, left to skip; tap the cover to hear it from ~45 s in (Spotify no longer gives apps 30-second previews) and MoodMix puts back what was playing.
-- **Profile:** your Spotify name and picture, songs explored / added / played next / skipped, keep rate, day streak, moods you discover, and recent finds.
-- **Labels are never paid for twice:** they're backed up to the iPhone's Keychain (which survives reinstalling), batches over 25 songs ask first, and the Mac can hand its labels over (Mac Settings → *Export labels for iPhone*, AirDrop the `.moodmixlabels` file to the phone).
-- If Spotify isn't running on the phone, Generate opens Spotify for a moment; tap **◀ MoodMix** in the top-left corner to come back and the mix starts. Mixes play on the phone unless another device is already playing.
-
-1. In your Spotify app's dashboard, also add the Redirect URI `moodmix://callback`.
-2. Open `iOS/MoodMixiOS.xcodeproj` in Xcode (regenerate it with `cd iOS && xcodegen generate` after changing `project.yml`).
-3. Select the **MoodMixiOS** target → *Signing & Capabilities* → choose your Team (a free Apple ID works), do the same for **MoodMixWidgets**, then run on your iPhone.
-
-There's no Dynamic Island / Live Activity: keeping it up to date while Spotify plays in the background would need a push server.
+Crossfading is done by Spotify itself: turn on **Settings → Playback → Crossfade** or **Automix** in Spotify. MoodMix's ordering makes those blends land well.
 
 ## Security
 
-- **No secrets in this repo.** Spotify login uses PKCE (no client secret exists); the Client ID and Apple team ID that do appear aren't secret.
-- **Mac:** the Spotify login and Anthropic key live in your login Keychain, readable only by MoodMix; any other program (even `security`) makes macOS ask you. `scripts/run-mac.sh` signs the app so that lock survives rebuilds.
-- **iPhone:** secrets are readable only while the phone is unlocked and never leave the device (not in backups, not moved to a new phone).
-- **Spotify login on the Mac** listens on 127.0.0.1 only, for at most 5 minutes; a random state value rejects forged callbacks.
-- **Spotify Development Mode** only lets accounts you add under *User Management* log in, so even with this code nobody else can use your Spotify app.
-- Keys go only to `api.anthropic.com` / `api.spotify.com` / `accounts.spotify.com` over HTTPS; logs never contain keys or tokens.
+- **No secrets in this repository.** Spotify login uses PKCE, so there is no client secret; the Client ID you paste and your tokens stay on your device.
+- **Mac:** your Spotify login and Anthropic key live in your login Keychain, readable only by MoodMix. Any other program, even `security`, makes macOS ask you.
+- **iPhone:** secrets are readable only while the phone is unlocked and never leave it (not in backups, not moved to a new phone).
+- **Spotify login on the Mac** listens on `127.0.0.1` only, for at most 5 minutes, and rejects forged callbacks.
+- **Spotify Development Mode** only lets the accounts in your app's *User Management* log in.
+- Keys are only sent, over HTTPS, to `api.anthropic.com`, `api.spotify.com` and `accounts.spotify.com`; logs never contain them.
 
-## Notes
+Found a security problem? Please open an issue without the details, and I'll get in touch.
 
-- Songs added to a playlist more than once are counted once (the card notes how many duplicates were skipped).
-- Spotify only returns playlist items for playlists you **own or collaborate on**. To use someone else's playlist, copy it to your own playlist first.
-- Claude's default model is `claude-opus-5-5`. You can switch to `claude-haiku-5-5` in Settings for a much cheaper first pass over thousands of songs. Results are cached in `~/Library/Application Support/MoodMix/profiles.json`.
+## Contributing
 
-## Roadmap
+Issues and pull requests are welcome.
 
-- [ ] Live Activity on the iPhone (needs a small push server)
-- [ ] Direct Apple Music import (needs an Apple Developer token)
+- `Sources/MoodMixCore`: shared logic (Spotify, mixing, queue, learning, discovery), used by both apps.
+- `Sources/MoodMixMac`: the Mac widget.
+- `iOS/`: the iPhone app and widgets.
+- `Tests/`: run with `swift test`.
+
+## License
+
+Licensed under the [MIT License](LICENSE). Copyright © 2026 Pratham Saxena.
+
+MoodMix is not affiliated with, endorsed or sponsored by Spotify. Spotify is a trademark of Spotify AB.
